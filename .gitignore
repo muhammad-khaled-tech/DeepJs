@@ -2,9 +2,10 @@
 *.py
 *.pyc
 __pycache__/
-
+*.zip
 # Documentation/Resources
 # (Leaving Resources/ tracked to backup raw markdown notes)
-
+Resources
 # Log/Output files
 repomix-output.xml
+*.md
