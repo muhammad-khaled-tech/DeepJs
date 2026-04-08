@@ -1,0 +1,10 @@
+# Python
+*.py
+*.pyc
+__pycache__/
+
+# Documentation/Resources (Not needed in deployment)
+Resources/
+
+# Log/Output files
+repomix-output.xml

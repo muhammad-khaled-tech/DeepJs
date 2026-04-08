@@ -37,6 +37,9 @@
 <button class="nav-btn" id="nav-2" onclick="showSection(2)"><span class="nav-title">Module 5 &amp; 6</span><span class="nav-sub">Async Brain · Node.js Core</span></button>
 <button class="nav-btn" id="nav-3" onclick="showSection(3)"><span class="nav-title">Module 7</span><span class="nav-sub">Design Patterns</span></button>
 <button class="nav-btn" id="nav-4" onclick="showSection(4)"><span class="nav-title">Q&amp;A Gauntlet</span><span class="nav-sub">30 Interview Questions</span></button>
+<button class="nav-btn" id="nav-5" onclick="showSection(5)"><span class="nav-title">Module 8</span><span class="nav-sub">V8 Internals & GC</span></button>
+<button class="nav-btn" id="nav-6" onclick="showSection(6)"><span class="nav-title">Module 9</span><span class="nav-sub">Symbols & Protocols</span></button>
+<button class="nav-btn" id="nav-7" onclick="showSection(7)"><span class="nav-title">Module 10</span><span class="nav-sub">FP Masterclass</span></button>
 
   </nav>
 
@@ -671,6 +674,305 @@ function handleRequestArchitect(reqData) {
 <hr class="divider">
 <div class="spacer"></div>
 
+<h2 id="1-memory-model-العميق" class="heading-2">1. Memory Model العميق</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-الجافاسكريبت-بتتكلم-عن-الـ-heap-والـ-stack-بس-مين-يروح-فين-بالظبط" class="heading-3">المشكلة: الجافاسكريبت بتتكلم عن الـ Heap والـ Stack — بس مين يروح فين بالظبط؟</h3>
+<div class="spacer"></div>
+<p>معظم الشروحات بتقولك "Primitives في الـ Stack، Objects في الـ Heap" وبعدين بتسيبك. بس ده مش الصورة الكاملة. خلينا نبني الفهم من الصفر.</p>
+<h3 id="الكمبيوتر-عنده-كذا-طبقة-ميموري" class="heading-3">الكمبيوتر عنده كذا طبقة ميموري</h3>
+<div class="spacer"></div>
+<p>قبل ما نتكلم عن JS، لازم تعرف إن الميموري مش "حاجة واحدة". الجهاز عنده كذا طبقة بيتعامل معاها:</p>
+<pre><code class="language-javascript">CPU Registers     ← أسرع حاجة، بس عدد محدود جداً (8-16 register)
+L1/L2/L3 Cache   ← فيهم الـ Hot Data اللي CPU محتاجها دلوقتي
+RAM               ← الـ Working Memory — فيها برامجك الشغالة
+Hard Disk/SSD     ← التخزين الدائم — أبطأ بكتير</code></pre>
+<div class="spacer"></div>
+<p>الـ <strong>RAM</strong> هي اللي بيشتغل فيها JS Code بتاعك. وجوه الـ RAM، V8 بيقسم الميموري لمناطق كل منطقة ليها وظيفة مختلفة.</p>
+<h3 id="المناطق-التلاتة-الأساسية" class="heading-3">المناطق التلاتة الأساسية</h3>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    RAM["🖥️ RAM — كل الميموري"]
+
+    CODE["📜 Code Segment<br/><br/>بيتخزن فيه الكود المترجم<br/>Read-Only<br/>Machine Code + Bytecode"]
+
+    STACK["📚 Stack Memory<br/><br/>منطقة ثابتة الحجم<br/>تخزين Primitives<br/>تخزين References<br/>Stack Frames<br/>LIFO Structure"]
+
+    HEAP["🏔️ Heap Memory<br/><br/>منطقة ديناميكية الحجم<br/>تخزين Objects<br/>Arrays<br/>Functions<br/>بتتمسح بالـ GC"]
+
+    RAM --> CODE
+    RAM --> STACK
+    RAM --> HEAP
+
+    style RAM fill:#2c3e50,color:#fff
+    style CODE fill:#8e44ad,color:#fff
+    style STACK fill:#e74c3c,color:#fff
+    style HEAP fill:#27ae60,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="الـ-stack-الطابق-المنظم" class="heading-3">الـ Stack: الطابق المنظم</h3>
+<div class="spacer"></div>
+<p>الـ <strong>Stack</strong> هي منطقة ميموري بتشتغل بنظام صارم جداً — <strong>LIFO</strong> (Last In, First Out). تخيلها زي برواز الصحون، الصحن اللي حطيته آخر هو اللي هتاخده أول.</p>
+<pre><code class="language-javascript">Stack (من فوق لتحت):
+
+┌─────────────────────────────┐
+│ greet() Frame               │ ← آخر حاجة اتحطت، أول حاجة هتطلع
+│   name: "Ahmed" (value)     │
+│   greeting: ref→Heap#0042   │
+├─────────────────────────────┤
+│ main() Frame                │
+│   x: 42 (value)             │
+│   isActive: true (value)    │
+│   user: ref→Heap#0001       │ ← مش الـ Object نفسه، بس العنوان
+├─────────────────────────────┤
+│ Global Frame                │ ← أول حاجة اتحطت، آخر حاجة هتطلع
+│   PI: 3.14 (value)          │
+└─────────────────────────────┘</code></pre>
+<div class="spacer"></div>
+<p><strong>إيه اللي بيروح في الـ Stack؟</strong></p>
+<p class="callout-list-item"><strong>Primitive Values مباشرة</strong>: <code class="inline-code">number</code>, <code class="inline-code">string</code>, <code class="inline-code">boolean</code>, <code class="inline-code">null</code>, <code class="inline-code">undefined</code>, <code class="inline-code">bigint</code>, <code class="inline-code">symbol</code></p>
+<p class="callout-list-item"><strong>References (Pointers)</strong>: العنوان في الـ Heap اللي الـ Object موجود فيه — مش الـ Object نفسه</p>
+<p class="callout-list-item"><strong>Stack Frame بتاع كل Function</strong>: يعني الـ Local Variables وعنوان الرجوع</p>
+<p><strong>الـ Stack Frame:</strong> كل مرة بتنادي Function، V8 بيخلق "Frame" في الـ Stack بيتخزن فيه:</p>
+<pre><code class="language-javascript">function calculateArea(width, height) {
+    // ┌─── Stack Frame لـ calculateArea ───────────────────┐
+    // │ width: 10       (primitive — القيمة نفسها هنا)      │
+    // │ height: 5       (primitive — القيمة نفسها هنا)      │
+    // │ area: undefined (primitive — الأول)                 │
+    // │ return address: عنوان السطر اللي بعد الـ call      │
+    // └────────────────────────────────────────────────────┘
+
+    const area = width * height;  // area اتحطت في الـ Frame
+    return area;
+
+    // لما الـ function تخلص، الـ Frame كله بيتشال من الـ Stack فوراً
+    // مفيش GC محتاج — الـ Stack بتتمسح أوتوماتيك
+}
+
+const result = calculateArea(10, 5);
+// result: 50 — اتحطت في الـ Frame بتاع Global</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-heap-المدينة-الفوضوية" class="heading-3">الـ Heap: المدينة الفوضوية</h3>
+<div class="spacer"></div>
+<p>الـ <strong>Heap</strong> بخلاف الـ Stack مش بيشتغل بنظام ثابت. هو منطقة ميموري ديناميكية — يعني ممكن تخزن فيها أي حجم في أي مكان. الـ Heap ممكن ينكبر ويتصغر وقت التشغيل.</p>
+<pre><code class="language-javascript">// كل ده بيروح في الـ Heap:
+
+const user = { name: "Ahmed", age: 25 };
+// ↑ Object في الـ Heap في عنوان مثلاً Heap#0x4A2F
+
+const numbers = [1, 2, 3, 4, 5];
+// ↑ Array في الـ Heap في عنوان تاني
+
+function greet(name) { return `Hello ${name}`; }
+// ↑ حتى الـ Function نفسها بتتخزن كـ Object في الـ Heap!
+
+const user2 = user;
+// ↑ user2 في الـ Stack بيشاور على نفس العنوان Heap#0x4A2F
+//   مش نسخة جديدة — نفس الـ Object في الـ Heap</code></pre>
+<div class="spacer"></div>
+<h3 id="الفرق-الجوهري-value-vs-reference-semantics" class="heading-3">الفرق الجوهري: Value vs Reference Semantics</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── Primitive: Copy by Value ──────────────────────────────
+let a = 42;
+let b = a;   // نسخة تانية مستقلة في الـ Stack
+
+b = 100;
+console.log(a); // 42 — مش اتأثر
+console.log(b); // 100
+
+// ── Object: Copy by Reference ─────────────────────────────
+let obj1 = { score: 42 };
+let obj2 = obj1;  // كلاهم بيشاوروا على نفس الـ Object في الـ Heap
+
+obj2.score = 100;
+console.log(obj1.score); // 100 — اتأثر! لأنهم نفس الـ Object
+console.log(obj2.score); // 100</code></pre>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">graph LR
+    subgraph STACK["📚 Stack Memory"]
+        A["a = 42"]
+        B["b = 100"]
+        OBJ1_REF["obj1 = ref"]
+        OBJ2_REF["obj2 = ref"]
+    end
+
+    subgraph HEAP["🏔️ Heap Memory"]
+        PRIM1["Primitive: 42<br/>(نسخة مستقلة)"]
+        PRIM2["Primitive: 100<br/>(نسخة مستقلة)"]
+        OBJ["Object: { score: 100 }<br/>عنوان: Heap#0x4A2F"]
+    end
+
+    A --> PRIM1
+    B --> PRIM2
+    OBJ1_REF -->|"يشاور على"| OBJ
+    OBJ2_REF -->|"يشاور على نفس الـ Object"| OBJ
+
+    style STACK fill:#e74c3c,color:#fff
+    style HEAP fill:#27ae60,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="الـ-stack-frame-بالتفصيل-call-stack-ومنطقة-الإعدام" class="heading-3">الـ Stack Frame بالتفصيل: Call Stack ومنطقة الإعدام</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">function outer() {
+    const x = 10;            // x: Stack Frame of outer
+
+    function inner() {
+        const y = 20;         // y: Stack Frame of inner
+        return x + y;         // inner يقرأ x من الـ Closure — Heap!
+    }
+
+    return inner();
+}
+
+outer();</code></pre>
+<div class="spacer"></div>
+<p>لما الكود ده بيشتغل، الـ Call Stack بيبدو كده:</p>
+<pre><code class="language-javascript">Step 1: قبل أي حاجة
+┌─────────────────┐
+│   Global Frame  │
+└─────────────────┘
+
+Step 2: لما بنادي outer()
+┌─────────────────┐
+│  outer() Frame  │  ← x = 10 هنا
+│   x: 10         │
+├─────────────────┤
+│   Global Frame  │
+└─────────────────┘
+
+Step 3: لما outer بتنادي inner()
+┌─────────────────┐
+│  inner() Frame  │  ← y = 20 هنا
+│   y: 20         │
+├─────────────────┤
+│  outer() Frame  │
+│   x: 10         │
+├─────────────────┤
+│   Global Frame  │
+└─────────────────┘
+
+Step 4: inner بترجع 30، Frame بيتشال
+┌─────────────────┐
+│  outer() Frame  │
+│   x: 10         │
+├─────────────────┤
+│   Global Frame  │
+└─────────────────┘
+
+Step 5: outer بترجع، Frame بيتشال
+┌─────────────────┐
+│   Global Frame  │
+└─────────────────┘</code></pre>
+<div class="spacer"></div>
+<div class="callout-example callout"><div class="callout-title"><span class="callout-icon">💻</span><span>مثال عملي</span></div><div class="callout-body">
+<p><strong>الـ Closure والـ Heap:</strong> في المثال فوق، لو <code class="inline-code">inner</code> اترجعت للبره ومتنفذتش فوراً، الـ <code class="inline-code">x</code> مش هيتشال من الـ Stack. بدل كده، V8 بيحول الـ <code class="inline-code">x</code> لـ Object في الـ Heap عشان الـ Closure تفضل قادرة توصله. ده بيحصل أوتوماتيك.</p>
+</div></div>
+<div class="spacer"></div>
+<h3 id="إيه-اللي-بيروح-stack-وإيه-اللي-بيروح-heap-الجدول-النهائي" class="heading-3">إيه اللي بيروح Stack وإيه اللي بيروح Heap؟ — الجدول النهائي</h3>
+<div class="spacer"></div>
+<table class="styled-table"><thead><tr>
+<th>البيانات</th>
+<th>فين؟</th>
+<th>ليه؟</th>
+</tr></thead><tbody>
+<tr>
+<td><code class="inline-code">number</code> (مثلاً <code class="inline-code">42</code>)</td>
+<td>Stack</td>
+<td>Primitive، حجم ثابت (64 bit)</td>
+</tr>
+<tr>
+<td><code class="inline-code">string</code> (قصير)</td>
+<td>Stack</td>
+<td>V8 بيحط الـ Small Strings جوا الـ Stack أحياناً</td>
+</tr>
+<tr>
+<td><code class="inline-code">string</code> (طويل)</td>
+<td>Heap</td>
+<td>V8 بيحطها في الـ Heap ويسيب Reference في الـ Stack</td>
+</tr>
+<tr>
+<td><code class="inline-code">boolean</code></td>
+<td>Stack</td>
+<td>حجم ثابت (1 bit فعلياً)</td>
+</tr>
+<tr>
+<td><code class="inline-code">null</code> / <code class="inline-code">undefined</code></td>
+<td>Stack</td>
+<td>قيم Primitive</td>
+</tr>
+<tr>
+<td><code class="inline-code">bigint</code></td>
+<td>Heap</td>
+<td>حجم متغير — محتاج Heap</td>
+</tr>
+<tr>
+<td><code class="inline-code">symbol</code></td>
+<td>Heap</td>
+<td>Object تحت الكبوت</td>
+</tr>
+<tr>
+<td><code class="inline-code">object</code> <code class="inline-code">{}</code></td>
+<td>Heap</td>
+<td>حجم متغير — المحتوى في الـ Heap، الـ Reference في الـ Stack</td>
+</tr>
+<tr>
+<td><code class="inline-code">array</code> <code class="inline-code">[]</code></td>
+<td>Heap</td>
+<td>Special Object في الـ Heap</td>
+</tr>
+<tr>
+<td><code class="inline-code">function</code></td>
+<td>Heap</td>
+<td>Function Object في الـ Heap</td>
+</tr>
+<tr>
+<td>Reference / Pointer</td>
+<td>Stack</td>
+<td>عنوان الـ Object في الـ Heap</td>
+</tr>
+<tr>
+<td>Local Variable (Primitive)</td>
+<td>Stack</td>
+<td>جزء من الـ Stack Frame</td>
+</tr>
+<tr>
+<td>Closure Variable</td>
+<td>Heap</td>
+<td>V8 بيحولها لـ Heap عشان تعيش</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<h3 id="الـ-v8-heap-من-جوه-مش-heap-واحد" class="heading-3">الـ V8 Heap من جوه — مش Heap واحد!</h3>
+<div class="spacer"></div>
+<p>اللي كتيير ناس مش عارفينه: V8 مش عنده Heap واحد. هو بيقسم الـ Heap لمناطق مختلفة لأسباب كلها أداء:</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    V8_HEAP["🏔️ V8 Heap — الصورة الكاملة"]
+
+    NEW_SPACE["🐣 New Space<br/><br/>Young Generation<br/>Objects الجديدة<br/>حجم صغير ~8MB<br/>GC سريع جداً<br/>Scavenger Algorithm"]
+
+    OLD_SPACE["👴 Old Space<br/><br/>Old Generation<br/>Objects عاشت<br/>لـ Minor GC مرتين<br/>حجم كبير<br/>Mark-Sweep-Compact"]
+
+    CODE_SPACE["📜 Code Space<br/><br/>JIT Compiled Code<br/>Executable Memory<br/>خاص بالـ JIT"]
+
+    MAP_SPACE["🗺️ Map Space<br/><br/>Hidden Classes<br/>Shape Objects<br/>بيتكلم عنه بالتفصيل جوه"]
+
+    LARGE_OBJ["🐘 Large Object Space<br/><br/>Objects أكبر من 256KB<br/>مش بتتنقل أبداً<br/>لأن النقل تقيل"]
+
+    V8_HEAP --> NEW_SPACE
+    V8_HEAP --> OLD_SPACE
+    V8_HEAP --> CODE_SPACE
+    V8_HEAP --> MAP_SPACE
+    V8_HEAP --> LARGE_OBJ
+
+    style V8_HEAP fill:#2c3e50,color:#fff
+    style NEW_SPACE fill:#3498db,color:#fff
+    style OLD_SPACE fill:#e74c3c,color:#fff
+    style CODE_SPACE fill:#8e44ad,color:#fff
+    style MAP_SPACE fill:#e67e22,color:#fff
+    style LARGE_OBJ fill:#1abc9c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
 <div class="spacer"></div></div></section>
 <section id="section-1" class="content-section" style="display:none"><div class="section-header"><h1 class="section-title">Module 3 &amp; 4</h1><p class="section-subtitle">Closures · Module Pattern · FP</p></div><div class="section-body"><h1 id="javascript-nodejs-the-elite-interview-vault" class="heading-1">🏛️ JavaScript &amp; Node.js — The Elite Interview Vault</h1>
 <h2 id="الجزء-التاني-module-3-module-4" class="heading-2">الجزء التاني: Module 3 &amp; Module 4</h2>
@@ -1552,6 +1854,187 @@ const itStaff = filterData(usersArray, isITDepartment);</code></pre><button clas
 <hr class="divider">
 <div class="spacer"></div>
 
+<h2 id="4-weakref-finalizationregistry" class="heading-2">4. WeakRef & FinalizationRegistry</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-اللي-es2021-جاي-يحلها" class="heading-3">المشكلة اللي ES2021 جاي يحلها</h3>
+<div class="spacer"></div>
+<p>تخيل الـ Scenario ده:</p>
+<pre><code class="language-javascript">// بتبني Image Editor
+const imageCache = new Map();
+
+function loadImage(url) {
+    if (imageCache.has(url)) return imageCache.get(url);
+
+    const image = new Image(url);  // بياخد ذاكرة كبيرة
+    imageCache.set(url, image);    // بيحتفظ بيه في الـ Map
+    return image;
+}
+
+// المشكلة: الـ Map بيعمل Strong Reference على الـ Images
+// حتى لو محدش بيستخدم الـ Image دي تاني، الـ Map لسه شايلاها
+// ← Memory Leak كلاسيك!</code></pre>
+<div class="spacer"></div>
+<p>الـ <code class="inline-code">WeakMap</code> حلت جزء من المشكلة، لكن مش كل حاجة. الـ <strong>WeakRef</strong> و<strong>FinalizationRegistry</strong> جاءوا يكملوا الصورة.</p>
+<h3 id="weakref-reference-الضعيفة" class="heading-3">WeakRef — Reference الضعيفة</h3>
+<div class="spacer"></div>
+<p>الـ <code class="inline-code">WeakRef</code> بيخليك تشاور على Object من غير ما تمنع الـ GC من مسحه. يعني "أنا عايز أشاور على ده، بس لو الـ GC قرر يمسحه — عادي خليه يمسحه."</p>
+<pre><code class="language-javascript">// بدون WeakRef — Strong Reference تمنع GC
+let user = { name: "Ahmed", data: new Array(1000000) };
+const ref = user;  // ref بيمنع GC حتى لو user = null
+
+user = null;
+// Object لسه حي! ref لسه بيشاور عليه</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// مع WeakRef — Weak Reference مش بتمنع GC
+let user = { name: "Ahmed", data: new Array(1000000) };
+const weakRef = new WeakRef(user);
+
+user = null;  // الـ user Object بقى Unreachable
+// GC حر يمسحه في أي وقت
+
+// عشان توصل للـ Object:
+const userObj = weakRef.deref();
+if (userObj !== undefined) {
+    // Object لسه موجود
+    console.log(userObj.name);
+} else {
+    // Object اتمسح من الـ GC
+    console.log("اتمسح!");
+}</code></pre>
+<div class="spacer"></div>
+<p><strong>القاعدة الذهبية:</strong> دايماً افحص الـ <code class="inline-code">deref()</code> قبل ما تستخدمه. الـ Object ممكن يكون اتمسح في أي لحظة.</p>
+<h3 id="مثال-عملي-smart-cache-بـ-weakref" class="heading-3">مثال عملي: Smart Cache بـ WeakRef</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">class ImageCache {
+    #cache = new Map();
+
+    get(url) {
+        const ref = this.#cache.get(url);
+        if (!ref) return null;
+
+        const image = ref.deref();
+        if (image === undefined) {
+            // Image اتمسح من الـ GC، نضف الـ Cache
+            this.#cache.delete(url);
+            return null;
+        }
+
+        return image;  // لسه موجودة
+    }
+
+    set(url, image) {
+        // بنخزن WeakRef مش الـ Object نفسه
+        this.#cache.set(url, new WeakRef(image));
+    }
+}
+
+const cache = new ImageCache();
+
+// استخدام
+let bigImage = loadHeavyImage("photo.jpg");
+cache.set("photo.jpg", bigImage);
+
+// بعدين
+bigImage = null;  // مش محتاجينه
+// الـ GC هيمسحه، وأول ما نطلبه من الـ Cache هيرجع null
+
+const img = cache.get("photo.jpg");
+if (img) {
+    display(img);
+} else {
+    bigImage = loadHeavyImage("photo.jpg");  // يعيد التحميل
+    cache.set("photo.jpg", bigImage);
+}</code></pre>
+<div class="spacer"></div>
+<h3 id="finalizationregistry-خبرني-لما-تمسحه" class="heading-3">FinalizationRegistry — "خبّرني لما تمسحه"</h3>
+<div class="spacer"></div>
+<p>الـ <code class="inline-code">FinalizationRegistry</code> بيخليك تسجّل <strong>Callback</strong> هيتنادى لما Object معين يتمسح من الـ GC.</p>
+<pre><code class="language-javascript">const registry = new FinalizationRegistry((heldValue) =&gt; {
+    // ده بيتنادى بعد ما الـ Object يتمسح
+    console.log(`Object اتمسح: ${heldValue}`);
+});
+
+let obj = { name: "Ahmed" };
+registry.register(obj, "Ahmed's Object");  // "Ahmed's Object" هو الـ heldValue
+
+obj = null;  // مفيش References تانية
+// في الـ GC الجاي:
+// → "Object اتمسح: Ahmed's Object"</code></pre>
+<div class="spacer"></div>
+<p><strong>تحذير مهم:</strong> مش هتعرف إمتى بالظبط هيتنادى الـ Callback. الـ GC مش Deterministic — ممكن يأجل المسح. مش استخدمه لحاجات Timing-Sensitive.</p>
+<h3 id="مثال-متقدم-resource-cleanup" class="heading-3">مثال متقدم: Resource Cleanup</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// مشكلة: Managing External Resources اللي JS مش مسيطر عليها
+class DatabaseConnection {
+    #handle;        // Native handle (C++ Resource)
+    #registry;      // FinalizationRegistry
+
+    constructor(connectionString) {
+        this.#handle = openNativeConnection(connectionString);
+
+        // نسجل Cleanup Callback
+        this.#registry = new FinalizationRegistry((handle) =&gt; {
+            console.warn("⚠️ Connection اتمسح من الـ GC من غير ما تتقفل يدوي!");
+            closeNativeConnection(handle);  // نقفل الـ Native Resource
+        });
+
+        this.#registry.register(this, this.#handle);
+    }
+
+    query(sql) {
+        if (!this.#handle) throw new Error("Connection مقفولة");
+        return executeQuery(this.#handle, sql);
+    }
+
+    close() {
+        if (this.#handle) {
+            closeNativeConnection(this.#handle);
+            this.#handle = null;
+        }
+    }
+}
+
+// الاستخدام الصح: دايماً اقفل يدوي
+const conn = new DatabaseConnection("postgres://...");
+try {
+    await conn.query("SELECT * FROM users");
+} finally {
+    conn.close();  // ← دايماً اعمل ده
+}
+
+// لو نسيت تقفل، الـ FinalizationRegistry هيقفل بس مش هتعرف إمتى!</code></pre>
+<div class="spacer"></div>
+<h3 id="weakref-vs-weakmap-إمتى-تستخدم-إيه" class="heading-3">WeakRef vs WeakMap — إمتى تستخدم إيه؟</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// WeakMap: بتخزن داتا إضافية مرتبطة بـ Object
+// لو الـ Object اتمسح، الـ Entry اتمسحت أوتوماتيك
+const extraData = new WeakMap();
+extraData.set(user, { permissions: ["read", "write"] });
+
+// WeakRef: بتشاور على Object ممكن يتمسح
+// لازم تفحص deref() قبل الاستخدام
+const ref = new WeakRef(user);
+const u = ref.deref(); // ممكن undefined
+
+// القاعدة:
+// WeakMap  → بتربط داتا بـ Object (مش محتاج deref)
+// WeakRef  → بتشاور على Object ممكن يمشي (محتاج deref + check)</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-limitations-المهمة" class="heading-3">الـ Limitations المهمة</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ❌ Primitives مش بتشتغل مع WeakRef
+const weakNum = new WeakRef(42);      // TypeError!
+const weakStr = new WeakRef("hello"); // TypeError!
+
+// ✅ Objects فقط
+const weakObj = new WeakRef({ x: 1 }); // OK
+
+// ❌ مش هتعمل WeakRef لـ WeakRef
+// ❌ لا تعتمد على الـ Timing — الـ GC مش Deterministic
+// ❌ في بعض الـ Environments الـ GC ممكن ما يشتغلش أصلاً!</code></pre>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
 <div class="spacer"></div></div></section>
 <section id="section-2" class="content-section" style="display:none"><div class="section-header"><h1 class="section-title">Module 5 &amp; 6</h1><p class="section-subtitle">Async Brain · Node.js Core</p></div><div class="section-body"><h1 id="javascript-nodejs-the-elite-interview-vault" class="heading-1">🏛️ JavaScript &amp; Node.js — The Elite Interview Vault</h1>
 <h2 id="الجزء-التالت-module-5-module-6" class="heading-2">الجزء التالت: Module 5 &amp; Module 6</h2>
@@ -2847,7 +3330,7 @@ promise.catch(err =&gt; {
 <div class="spacer"></div>
 <div class="callout-bug callout"><div class="callout-title"><span class="callout-icon">🕵️</span><span>🕵️ فخ الانترفيو — CPU-Bound &amp; The async Myth</span></div><div class="callout-body">
 <p>في الانترفيوهات التقيلة، هيجيبلك كود بيعمل حسابات معقدة زي <code class="inline-code">SubsetSum</code>، ويقولك:</p>
-<p><em>"المبرمج ده حط الكود في <code class="inline-code">Promise</code> وعمل <code class="inline-code">await</code>، ففاكر إن الكود كده بقى Asynchronous ومش هيعطل السيرفر.. هل كلامه صح؟ وليه الـ Promise مابيحميش الـ Event Loop من الـ CPU-Bound tasks؟ وإيه هو الفرق المعماري بين تمرير الداتا لـ <code class="inline-code">child</em>process</code> وتمريرها لـ <code class="inline-code">worker<em>threads</code>؟"</em></p>
+<p><em>"المبرمج ده حط الكود في <code class="inline-code">Promise</code> وعمل <code class="inline-code">await</code>، ففاكر إن الكود كده بقى Asynchronous ومش هيعطل السيرفر.. هل كلامه صح؟ وليه الـ Promise مابيحميش الـ Event Loop من الـ CPU-Bound tasks؟ وإيه هو الفرق المعماري بين تمرير الداتا لـ <code class="inline-code">child_process</code> وتمريرها لـ <code class="inline-code">worker_threads</code>؟"</em></p>
 <p>الهدف هنا إنه يفضح فكرة إن <code class="inline-code">async/await</code> سحر بيحل كل حاجة. هو عايز يتأكد إنك فاهم إن الـ Promise بيتعمل له Execute على نفس الـ Main Thread، وإن الـ CPU Intensive logic هيفضل يعمل Block للسيرفر حتى لو جوه Promise!</p>
 </div></div>
 <div class="spacer"></div>
@@ -3691,8 +4174,2835 @@ processInOrder();
 <hr class="divider">
 <div class="spacer"></div>
 <p><em>الـ Vault ده من إنتاج جلسات Claude × Mohamed — بيتحدث مع كل إضافة جديدة.</em></p>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="part-5-js-internals-memory-v8-gc-symbols" class="heading-3">🧠 Part 5: JS Internals — Memory, V8, GC & Symbols</h3>
+<div class="spacer"></div>
+<h3 id="memory-model" class="heading-3">🏗️ Memory Model</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين الـ Stack والـ Heap في JavaScript؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p><strong>Stack:</strong> ميموري منظمة بنظام LIFO. بيتخزن فيها الـ Primitive Values مباشرة والـ References (Pointers) للـ Objects والـ Stack Frames بتاعة الـ Functions. بتتمسح أوتوماتيك لما الـ Function تخلص — مفيش GC محتاج.</p>
+<p><strong>Heap:</strong> ميموري ديناميكية فوضوية. بيتخزن فيها الـ Objects والـ Arrays والـ Functions والـ Closures. بتتمسح بالـ GC بس لما يعرف إن محدش بيشاور على الـ Object.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: لو عملت <code class="inline-code">const a = { x: 1 }</code> وبعدين <code class="inline-code">const b = a</code> — هل <code class="inline-code">b</code> نسخة من <code class="inline-code">a</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>لأ. الاتنين بيشاوروا على <strong>نفس الـ Object في الـ Heap</strong>. <code class="inline-code">a</code> و<code class="inline-code">b</code> كلاهم References (Pointers) موجودين في الـ Stack بيشاوروا على نفس العنوان في الـ Heap. لو غيرت <code class="inline-code">b.x = 2</code>، هتلاقي <code class="inline-code">a.x</code> بقت <code class="inline-code">2</code> برضو.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: ليه الـ GC مش بيمسح Object فيه Circular Reference؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>في الـ Modern GC (Mark & Sweep)، الـ Circular Reference مش مشكلة. الـ GC مش بيعتمد على "عدد الـ References" (Reference Counting — الطريقة القديمة اللي كانت بتتعلق بالـ Circular). هو بيسأل سؤال واحد: هل في طريق من الـ GC Roots للـ Object ده؟ لو أ وب بيشاوروا على بعض ومحدش تاني بيشاور عليهم من الـ Roots — الاتنين هيتمسحوا.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="v8-hidden-classes-ic" class="heading-3">⚙️ V8 Hidden Classes & IC</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه هو Hidden Class وليه V8 بيستخدمه؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Hidden Class (أو Shape) هو تمثيل داخلي بيوصف "شكل" الـ Object — إيه الـ Properties الموجودة وفين كل واحدة في الميموري. V8 بيستخدمه عشان يتجنب الـ Dynamic Lookup مع كل Property Access. لو كل الـ Objects اللي بتتعامل معاهم في نفس الـ Function عندهم نفس الـ Hidden Class، V8 بيعرف مكان كل Property بالـ Offset مباشرة — O(1) من غير بحث.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: ليه إضافة Properties بعد الـ Constructor بتبطئ الكود؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>لأنها بتكسر الـ Hidden Class. كل Object اتخلق بنفس الـ Constructor ليه نفس الـ Hidden Class — V8 بيتشاور على الـ IC (Inline Cache) اللي بيقوله "offset كذا". لما بتضيف Property بعدين، V8 بيعمل Hidden Class جديدة للـ Object ده بس. دلوقتي مش كل الـ Objects من نفس الـ Constructor بيشاروا على نفس الـ HC — V8 بيفقد القدرة على الـ Monomorphic IC وبيتحول لـ Polymorphic أو Megamorphic (أبطأ).</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين Monomorphic وMegamorphic IC؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p class="callout-list-item">- <strong>Monomorphic:</strong> كل الـ Calls لنفس الـ Function بتيجي من Object بنفس الـ Hidden Class. V8 بيعمل أقوى Optimization — Machine Code مباشر.</p>
+<p class="callout-list-item">- <strong>Polymorphic:</strong> 2-4 Shapes مختلفة. V8 بيعمل small lookup table.</p>
+<p class="callout-list-item">- <strong>Megamorphic:</strong> أكتر من 4 Shapes. V8 استسلم — بيعمل Dynamic Lookup في كل مرة زي JavaScript عادية.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="garbage-collection" class="heading-3">🗑️ Garbage Collection</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين Minor GC وMajor GC في V8؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p class="callout-list-item">- <strong>Minor GC (Scavenger):</strong> بيشتغل على الـ Young Generation (Objects الجديدة). سريع جداً — بيستخدم Cheney's Algorithm (Copy المعيشين لمكان تاني، امسح القديم كله دفعة واحدة). بيحصل كتير.</p>
+<p class="callout-list-item">- <strong>Major GC (Mark-Sweep-Compact):</strong> بيشتغل على الـ Old Generation (Objects اللي عاشت فترة). أبطأ لأن الـ Old Gen أكبر. بيستخدم Tri-Color Marking + Incremental/Concurrent للتقليل من الـ Stop-The-World.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه هو الـ Stop-The-World وإزاي V8 بيقللهوله؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Stop-The-World (STW) هو الفترة اللي الـ GC بيوقف فيها تنفيذ الـ JS خالص عشان يقدر يعمل Heap Traversal بأمان (مش هينتقل Object وهو بيحسب عليه). V8 بيقلله بـ: <strong>Incremental Marking</strong> (الـ Marking على شرايح صغيرة بدل دفعة واحدة) + <strong>Concurrent Marking</strong> (Thread تانية بتعمل الـ Marking في الخلفية جنب الـ JS).</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه هو الـ Write Barrier ولماذا موجود؟</strong></p>
+<div class="callout-example callout"><div class="callout-title"><span class="callout-icon">💻</span><span>كود</span></div><div class="callout-body">
+<p>الـ Write Barrier هو كود صغير جداً بيشتغل مع كل عملية كتابة Object Reference. وظيفته: لما الـ Concurrent GC شغال ومتعلم على Objects، والـ JS في نفس الوقت بيغير Reference، الـ Write Barrier بيخبر الـ GC إن في تغيير حصل عشان يرجع يفحص. بدونه، الـ GC ممكن يعمل Mark Object إنه "Live" وبعدين الـ JS يقطع الـ Reference الوحيدة ليه — الـ Object يعمل Dead بس الـ GC مش عارف.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="weakref-finalizationregistry" class="heading-3">🔗 WeakRef & FinalizationRegistry</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إمتى تستخدم WeakRef بدل WeakMap؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p class="callout-list-item">- <strong>WeakMap:</strong> لما بتربط داتا إضافية بـ Object ومحتاجها تتمسح أوتوماتيك لو الـ Object مات. الـ WeakMap نفسه هو الـ Owner.</p>
+<p class="callout-list-item">- <strong>WeakRef:</strong> لما محتاج تشاور على Object من جهة تانية، وعايز الشارور ده ما يمنعش الـ GC. بتبقى عايز تستخدم الـ Object لو موجود، وتتعامل مع غيابه لو اتمسح.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: ليه مش تستخدم FinalizationRegistry للـ Resource Cleanup المضمون؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>لأن الـ FinalizationRegistry مش Deterministic — مش هتعرف إمتى هيتنادى الـ Callback. ممكن يتأخر أو حتى مايتنادش في بعض الـ Environments. الـ Resource Cleanup المضمون محتاج يكون Explicit — <code class="inline-code">close()</code>, <code class="inline-code">dispose()</code>, <code class="inline-code">try/finally</code>, أو الـ <code class="inline-code">using</code> keyword الجديد (Explicit Resource Management). الـ FinalizationRegistry هو خط دفاع أخير للناسين يقفلوا يدوياً.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="symbols" class="heading-3">🔣 Symbols</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين <code class="inline-code">Symbol()</code> و<code class="inline-code">Symbol.for()</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p class="callout-list-item">- <code class="inline-code">Symbol()</code>: بيعمل Symbol فريد في كل مرة — حتى بنفس الـ Description مش بيساووا بعض.</p>
+<p class="callout-list-item">- <code class="inline-code">Symbol.for("key")</code>: بيدور في Global Symbol Registry. لو الـ key موجود — بيرجع نفس الـ Symbol. لو مش موجود — بيعمل واحد ويحطه في الـ Registry. مفيد لمشاركة Symbols بين Modules.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إزاي تعمل Object يشتغل معاه <code class="inline-code">for...of</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>بتضيف <code class="inline-code">[Symbol.iterator]()</code> method بترجع Iterator Object. الـ Iterator Object لازم يكون عنده <code class="inline-code">next()</code> method بترجع <code class="inline-code">{ value, done }</code>.</p>
+<pre><code class="language-javascript">
+class MyRange {
+constructor(n) { this.n = n; }
+[Symbol.iterator]() {
+let i = 0;
+const n = this.n;
+return {
+next() {
+return i &lt; n
+? { value: i++, done: false }
+: { value: undefined, done: true };
+}
+};
+}
+}
+for (const x of new MyRange(3)) console.log(x); // 0, 1, 2
+</code></pre>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه هو Symbol.toPrimitive وإمتى بيُستدعى؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p><code class="inline-code">Symbol.toPrimitive</code> method بتتنادى لما JavaScript محتاجة تحول Object لـ Primitive. بتاخد <code class="inline-code">hint</code> بيكون <code class="inline-code">"number"</code> أو <code class="inline-code">"string"</code> أو <code class="inline-code">"default"</code>:</p>
+<p class="callout-list-item">- <code class="inline-code">"number"</code>: في الـ Math Operations (<code class="inline-code">+obj</code>, <code class="inline-code">obj * 2</code>, <code class="inline-code">obj &gt; 5</code>)</p>
+<p class="callout-list-item">- <code class="inline-code">"string"</code>: في <code class="inline-code">String(obj)</code>, Template Literals, <code class="inline-code">console.log</code></p>
+<p class="callout-list-item">- <code class="inline-code">"default"</code>: في <code class="inline-code">==</code> و <code class="inline-code">+</code> مع String</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="جدول-المراجعة-السريعة" class="heading-3">📋 جدول المراجعة السريعة</h3>
+<div class="spacer"></div>
+<table class="styled-table"><thead><tr>
+<th>السؤال</th>
+<th>الإجابة الجوهرية</th>
+</tr></thead><tbody>
+<tr>
+<td>Primitives فين؟</td>
+<td>Stack (Value مباشر)</td>
+</tr>
+<tr>
+<td>Objects فين؟</td>
+<td>Heap (Reference في الـ Stack)</td>
+</tr>
+<tr>
+<td>Hidden Class إيه؟</td>
+<td>صورة داخلية بتوصف "شكل" الـ Object</td>
+</tr>
+<tr>
+<td>ليه ترتيب Properties مهم؟</td>
+<td>عشان نفس الـ Hidden Class = أسرع IC</td>
+</tr>
+<tr>
+<td>Monomorphic يعني إيه؟</td>
+<td>كل الـ Calls بنفس الـ Shape — أسرع Optimization</td>
+</tr>
+<tr>
+<td>Minor GC سريع ليه؟</td>
+<td>Young Gen صغير + Scavenger سريع</td>
+</tr>
+<tr>
+<td>Major GC أبطأ ليه؟</td>
+<td>Old Gen كبير + Mark-Sweep-Compact</td>
+</tr>
+<tr>
+<td>Stop-The-World إيه؟</td>
+<td>JS بيوقف أثناء الـ GC</td>
+</tr>
+<tr>
+<td>Incremental Marking إيه؟</td>
+<td>GC بيشتغل على شرايح بدل دفعة واحدة</td>
+</tr>
+<tr>
+<td>WeakRef مش بيمنع إيه؟</td>
+<td>مش بيمنع الـ GC من المسح</td>
+</tr>
+<tr>
+<td>deref() ممكن يرجع إيه؟</td>
+<td>الـ Object لو موجود، أو <code class="inline-code">undefined</code> لو اتمسح</td>
+</tr>
+<tr>
+<td>Symbol.iterator بيعمل إيه؟</td>
+<td>بيخلي الـ Object يشتغل مع <code class="inline-code">for...of</code></td>
+</tr>
+<tr>
+<td>Symbol.toPrimitive hint إيه؟</td>
+<td>"number", "string", "default"</td>
+</tr>
+<tr>
+<td>Symbol.hasInstance بيتحكم في إيه؟</td>
+<td>نتيجة <code class="inline-code">instanceof</code></td>
+</tr>
+<tr>
+<td>Symbol.for() بيرجع إيه؟</td>
+<td>نفس الـ Symbol لو الـ Key موجود في الـ Registry</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><em>آخر تحديث: 2025 | مصادر: V8 Blog + ECMAScript Spec + Mdn Web Docs + JavaScript: The New Hard Parts</em></p>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="part-6-functional-programming" class="heading-3">🎯 Part 6: Functional Programming</h3>
+<div class="spacer"></div>
+<h3 id="compose-vs-pipe" class="heading-3">🔗 Compose vs Pipe</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين <code class="inline-code">compose</code> و<code class="inline-code">pipe</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>كلاهم بيربطوا Functions مع بعض. الفرق في الترتيب فقط:</p>
+<p class="callout-list-item">- <code class="inline-code">compose(f, g, h)(x)</code> بتنفذ <code class="inline-code">h(x)</code> الأول، بعدين <code class="inline-code">g</code>، بعدين <code class="inline-code">f</code> — من اليمين لليسار (زي رياضيات المدرسة)</p>
+<p class="callout-list-item">- <code class="inline-code">pipe(f, g, h)(x)</code> بتنفذ <code class="inline-code">f(x)</code> الأول، بعدين <code class="inline-code">g</code>، بعدين <code class="inline-code">h</code> — من اليسار لليمين (زي قراءة الكود)</p>
+<p>بنبنيهم بـ <code class="inline-code">reduceRight</code> (compose) و <code class="inline-code">reduce</code> (pipe).</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Currying وعلاقته بالـ Composition؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Currying بيحول Function بتاخد <code class="inline-code">n</code> Arguments لسلسلة من Functions كل واحدة بتاخد Argument واحد. ده مهم للـ Composition لأن الـ compose/pipe بتتوقع Functions بـ Arity 1 (argument واحد). الـ Curry بيخليك تعمل Partial Application — تطبق بعض الـ Arguments وتوصّل Function جاهزة للـ Pipeline.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إزاي تبني <code class="inline-code">compose</code> من الصفر؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<pre><code class="language-javascript">
+const compose = (...fns) =&gt; (x) =&gt;
+fns.reduceRight((acc, fn) =&gt; fn(acc), x);
+</code></pre>
+<p><code class="inline-code">reduceRight</code> بتبدأ من آخر الـ Array — ده اللي بيخلي الـ Functions تتنفذ من اليمين لليسار.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="memoization" class="heading-3">🧠 Memoization</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Memoization وإمتى بتبقى Anti-Pattern؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Memoization هي Caching نتيجة Function call عشان لو اتنادت بنفس الـ Input ترجع الـ Cached Result بدل ما تعيد الحساب. بتبقى Anti-Pattern لما:</p>
+<p class="callout-list-item">- الـ Function مش Pure (بترجع نتائج مختلفة لنفس الـ Input)</p>
+<p class="callout-list-item">- الـ Function بيها Side Effects (بتكتب في DB مثلاً)</p>
+<p class="callout-list-item">- الـ Inputs متنوعة جداً (الـ Cache بيكبر بدون فايدة)</p>
+<p class="callout-list-item">- النتيجة بتعتمد على الوقت أو State خارجي</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: ليه بنستخدم <code class="inline-code">WeakMap</code> بدل <code class="inline-code">Map</code> في الـ Memoization؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>لو الـ Keys هي Objects، الـ <code class="inline-code">Map</code> بيمسك Reference لها — يعني الـ GC ما يقدرش يمسحها حتى لو محدش بيستخدمها. الـ <code class="inline-code">WeakMap</code> بيمسك Weak Reference، يعني لو الـ Object اتمسح من مكان تاني، الـ GC يقدر يمسحه من الـ <code class="inline-code">WeakMap</code> تلقائياً — مش هنعمل Memory Leak.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إزاي تبني Generic Memoize Function؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<pre><code class="language-javascript">
+function memoize(fn) {
+const cache = new Map();
+return (...args) =&gt; {
+const key = JSON.stringify(args);
+if (cache.has(key)) return cache.get(key);
+const result = fn(...args);
+cache.set(key, result);
+return result;
+};
+}
+</code></pre>
+<p>المشكلة في <code class="inline-code">JSON.stringify</code> إنه ما بيتعاملش مع <code class="inline-code">undefined</code>، <code class="inline-code">Symbol</code>، <code class="inline-code">Function</code> صح. للـ Production — استخدم مكتبة زي <code class="inline-code">fast-memoize</code> أو اعمل serializer أفضل.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="transducers" class="heading-3">🚆 Transducers</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Transducer وليه بيكون أسرع من <code class="inline-code">map().filter()</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Transducer هو Reducer Transformer — بدل ما تعمل <code class="inline-code">map</code> تنتج Array وسيطة وبعدين <code class="inline-code">filter</code> تعمل Array تانية، الـ Transducer بيدمج كل العمليات في Reducer واحد. ده بيعني:</p>
+<p class="callout-list-item">1. <strong>Pass واحد بس</strong> على الـ Data</p>
+<p class="callout-list-item">2. <strong>مفيش Intermediate Arrays</strong> — توفير ميموري</p>
+<p class="callout-list-item">3. <strong>Early Termination</strong> — ممكن توقف في النص (زي <code class="inline-code">take</code>)</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Arity في الـ Functional Programming؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Arity هو عدد الـ Arguments اللي Function بتاخدها. Function بـ Arity 1 = Unary، بـ Arity 2 = Binary، وهكذا. مهم في الـ Composition لأن الـ <code class="inline-code">compose/pipe</code> بيتوقع Unary Functions. الـ Currying بيحول أي Function لـ Unary.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="railway-oriented-programming" class="heading-3">🚃 Railway-Oriented Programming</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Either Monad ولماذا أفضل من try/catch؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Either Monad هو Wrapper بيلف القيمة في <code class="inline-code">Ok</code> لو الحاجة نجحت أو في <code class="inline-code">Err</code> لو فشلت. الفرق عن <code class="inline-code">try/catch</code>:</p>
+<p class="callout-list-item">- <strong>Composable</strong>: ممكن تعمل <code class="inline-code">map</code> و<code class="inline-code">flatMap</code> على النتيجة من غير ما تتشعب</p>
+<p class="callout-list-item">- <strong>Explicit</strong>: الـ Error جزء من الـ Type — مش surprise</p>
+<p class="callout-list-item">- <strong>Pipeline-friendly</strong>: بيشتغل مع <code class="inline-code">compose</code> و<code class="inline-code">pipe</code> مباشرة</p>
+<p class="callout-list-item">- <strong>مش Control Flow</strong>: الـ <code class="inline-code">try/catch</code> بيكسر الـ Flow — الـ Monad بيحافظ عليه</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Happy Path وإيه الـ Error Track؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>في الـ Railway-Oriented Programming:</p>
+<p class="callout-list-item">- <strong>Happy Path</strong>: سلسلة الـ <code class="inline-code">Ok</code> — الكود بيمشي للأمام من غير انقطاع</p>
+<p class="callout-list-item">- <strong>Error Track</strong>: لما يحصل <code class="inline-code">Err</code>، الـ Error بيمشي على خط منفصل. كل الـ <code class="inline-code">map</code> و<code class="inline-code">flatMap</code> التالية بيتجاهلوه لحد ما توصل لـ <code class="inline-code">fold</code> أو <code class="inline-code">getOrElse</code> في النهاية</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="lazy-evaluation" class="heading-3">💤 Lazy Evaluation</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Generator Function وإزاي بتعمل Lazy Evaluation؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>الـ Generator Function (<code class="inline-code">function*</code>) بتنتج Iterator. لما بتعمل <code class="inline-code">yield</code>، الـ Function بتوقف وبترجع القيمة للـ Consumer. بعدين بتكمل من نفس المكان لما يطلبوا القيمة الجاية. ده Lazy لأن:</p>
+<p class="callout-list-item">- الكود مش بيشتغل كله من أول</p>
+<p class="callout-list-item">- بيشتغل خطوة خطوة بس لما تطلب</p>
+<p class="callout-list-item">- ممكن تعمل Sequences لا نهائية من غير ما الميموري تخلص</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الفرق بين <code class="inline-code">function*</code> عادية وـ <code class="inline-code">async function*</code>؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p class="callout-list-item">- <code class="inline-code">function*</code>: Synchronous Generator — بيعمل <code class="inline-code">yield</code> لقيم عادية</p>
+<p class="callout-list-item">- <code class="inline-code">async function*</code>: Async Generator — بيعمل <code class="inline-code">yield</code> لـ Promises. بتستخدمه مع <code class="inline-code">for await...of</code>. مثالي لـ Paginated API calls أو Streams.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="point-free-style" class="heading-3">☁️ Point-Free Style</h3>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p><strong>Q: إيه الـ Point-Free Style وإيه مزاياه وعيوبه؟</strong></p>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>Point-Free Style هو كتابة Functions من غير ذكر الـ Arguments الوسيطة. المزايا:</p>
+<p class="callout-list-item">- <strong>Composability أعلى</strong>: الـ Functions مبنية من Blocks صغيرة</p>
+<p class="callout-list-item">- <strong>Reusability</strong>: كل Building Block مستقل</p>
+<p class="callout-list-item">- <strong>Test-friendly</strong>: بتـtest كل حاجة بشكل منفصل</p>
+<p>العيوب:</p>
+<p class="callout-list-item">- صعب للـ Beginners</p>
+<p class="callout-list-item">- Debugging أصعب أحياناً</p>
+<p class="callout-list-item">- ممكن يبقى غير واضح لو أفرطت فيه</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h3 id="جدول-المراجعة-السريعة" class="heading-3">📋 جدول المراجعة السريعة</h3>
+<div class="spacer"></div>
+<table class="styled-table"><thead><tr>
+<th>السؤال</th>
+<th>الإجابة الجوهرية</th>
+</tr></thead><tbody>
+<tr>
+<td><code class="inline-code">compose</code> vs <code class="inline-code">pipe</code></td>
+<td>نفس الشيء — الـ <code class="inline-code">compose</code> من اليمين، الـ <code class="inline-code">pipe</code> من اليسار</td>
+</tr>
+<tr>
+<td>ليه Currying مهم؟</td>
+<td>يحول Multi-Arg Functions لـ Unary للـ Composition</td>
+</tr>
+<tr>
+<td>Memoization متى؟</td>
+<td>بس مع Pure Functions</td>
+</tr>
+<tr>
+<td>ليه LRU Cache؟</td>
+<td>عشان الكاش ما يكبرش بلا حدود</td>
+</tr>
+<tr>
+<td>WeakMap في Memoize</td>
+<td>عشان Objects Keys ما تمنعش الـ GC</td>
+</tr>
+<tr>
+<td>Transducer ليه أسرع؟</td>
+<td>Pass واحد، مفيش Intermediate Arrays</td>
+</tr>
+<tr>
+<td>Either Monad إيه؟</td>
+<td>Wrapper للـ Success/Error بيكون Composable</td>
+</tr>
+<tr>
+<td>Happy Path إيه؟</td>
+<td>سلسلة الـ <code class="inline-code">Ok</code> في الـ Railway</td>
+</tr>
+<tr>
+<td>Generator متى؟</td>
+<td>Infinite Sequences, Large Data, Async Streams</td>
+</tr>
+<tr>
+<td><code class="inline-code">yield</code> بيعمل إيه؟</td>
+<td>بيوقف الـ Generator وبيرجع القيمة للـ Consumer</td>
+</tr>
+<tr>
+<td>Point-Free إيه؟</td>
+<td>كتابة Functions من غير ذكر الـ Arguments</td>
+</tr>
+<tr>
+<td><code class="inline-code">prop</code> بيعمل إيه؟</td>
+<td>بيجيب Property من Object بشكل Curried</td>
+</tr>
+<tr>
+<td><code class="inline-code">both</code> و <code class="inline-code">either</code></td>
+<td>&&  و \</td>
+<td>\</td>
+<td>بأسلوب Functional</td>
+</tr>
+<tr>
+<td>Transducer متى؟</td>
+<td>Arrays كبيرة، سلاسل map/filter طويلة</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">mindmap
+  root((JS Functional<br/>Programming))
+    Compose & Pipe
+      compose — من اليمين لليسار
+      pipe — من اليسار لليمين
+      Currying — لتحويل Multi-Arg
+      Partial Application
+    Memoization
+      Pure Functions فقط
+      LRU Cache — للحد من الحجم
+      WeakMap — للـ Object Keys
+      Anti-Patterns — Impure, Volatile
+    Transducers
+      Reducer Transformer
+      Pass واحد بس
+      مفيش Intermediate Arrays
+      Early Termination
+    Railway-Oriented
+      Ok — Happy Path
+      Err — Error Track
+      map — تحويل Ok
+      flatMap — Chaining
+      fold — النهاية
+    Lazy Evaluation
+      Generator function*
+      yield — توقف واسترجاع
+      Infinite Sequences
+      async function* — Streams
+    Point-Free Style
+      بدون ذكر الـ Arguments
+      Building Blocks صغيرة
+      prop, map, filter, reduce
+      both, either, not
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<p>🫒 <strong>زتونة الإنترفيو:</strong></p>
+<p>الـ Functional Programming في JavaScript مش مجرد <code class="inline-code">map</code> و<code class="inline-code">filter</code>. هو طريقة تفكير كاملة قايمة على أربع مبادئ: <strong>Pure Functions</strong> (نفس الـ Input → نفس الـ Output)، <strong>Immutability</strong> (ما بنغيرش البيانات الأصلية)، <strong>Composition</strong> (بنبني الكود من Blocks صغيرة)، و<strong>Declarative Style</strong> (بنقول "إيه" مش "إزاي"). الـ <code class="inline-code">compose/pipe</code> بيخليك تبني Pipelines واضحة. الـ <code class="inline-code">Memoization</code> بتحسن الـ Performance بس بشروط — Pure Functions فقط. الـ <code class="inline-code">Transducers</code> بيجمع كل الـ Map/Filter في Pass واحد. الـ <code class="inline-code">Railway</code> بيعمل Error Handling من غير ما يكسر الـ Flow. الـ <code class="inline-code">Generators</code> بيخليك تتعامل مع البيانات اللانهائية. والـ <code class="inline-code">Point-Free</code> بيخلي الكود Composable في أعلى مستوياته. اللي يفهم الفكر ده بيكتب كود أسهل في الـ Test، أقل في الـ Bugs، وأجمل في القراءة — وده اللي بيميز الـ Senior عن الـ Junior في أي إنترفيو.</p>
+<hr class="divider">
+<div class="spacer"></div>
+<p><em>آخر تحديث: 2025 | مصادر: "Professor Frisby's Mostly Adequate Guide to FP" + "Functional-Light JavaScript" + ECMAScript Spec + Ramda.js Docs</em></p>
 <div class="spacer"></div></div></section>
 
+<section id="section-5" class="content-section" style="display:none"><div class="section-header"><h1 class="section-title">Module 8</h1><p class="section-subtitle">🔬 V8 Hidden Classes & Garbage Collection</p></div><div class="section-body">
+<h2 id="2-v8-hidden-classes-inline-caching" class="heading-2">2. V8 Hidden Classes & Inline Caching</h2>
+<div class="spacer"></div>
+<h3 id="السؤال-اللي-senior-بيسألك-عليه-وانت-مش-متوقعه" class="heading-3">السؤال اللي Senior بيسألك عليه وانت مش متوقعه</h3>
+<div class="spacer"></div>
+<p>"ليه الـ Object ده أبطأ من ده رغم إنهم نفس الـ Object بالظبط؟"</p>
+<pre><code class="language-javascript">// Object A — سريع
+const fast = { x: 1, y: 2 };
+
+// Object B — أبطأ (بنفس القيم!)
+const slow = {};
+slow.x = 1;
+slow.y = 2;</code></pre>
+<div class="spacer"></div>
+<p>الإجابة كلها في حاجة اسمها <strong>Hidden Classes</strong> (أو <strong>Shapes</strong> أو <strong>Maps</strong> — نفس المفهوم بأسماء مختلفة).</p>
+<h3 id="v8-مش-بيعمل-dynamic-lookup" class="heading-3">V8 مش بيعمل Dynamic Lookup</h3>
+<div class="spacer"></div>
+<p>في JavaScript، المفروض كل مرة بتاخد <code class="inline-code">obj.x</code>، V8 يدور على <code class="inline-code">x</code> في الـ Object من أوله. ده سلوك Dynamic اللغة. بس ده <strong>بطيء جداً</strong> على النطاق الكبير.</p>
+<p>بدل كده، V8 عنده خدعة عبقرية: <strong>بيتظاهر إن JavaScript Static اللغة.</strong></p>
+<h3 id="الـ-hidden-class-نسخة-خفية-من-الـ-class" class="heading-3">الـ Hidden Class — نسخة خفية من الـ Class</h3>
+<div class="spacer"></div>
+<p>لما بتعمل Object، V8 مش بيخزن بس الـ Properties. هو بيخلق "صورة داخلية" اسمها <strong>Hidden Class</strong> (بيخزنها في الـ Map Space اللي اتكلمنا عنه). الـ Hidden Class بيوصف "شكل" الـ Object — إيه الـ Properties الموجودة وفين كل واحدة في الميموري.</p>
+<pre><code class="language-javascript">// لما بتكتب:
+const point = { x: 1, y: 2 };
+
+// V8 بيعمل:
+// Hidden Class HC0: { x: offset+0, y: offset+8 }
+// point ─► HC0
+// point.x ─► offset+0
+// point.y ─► offset+8</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-transition-chain-سلسلة-التحولات" class="heading-3">الـ Transition Chain — سلسلة التحولات</h3>
+<div class="spacer"></div>
+<p>كل ما بتضيف Property، V8 بيعمل Hidden Class جديدة ويعمل "Transition" من القديمة للجديدة:</p>
+<div class="mermaid-wrap"><div class="mermaid">graph LR
+    HC0["HC0<br/><br/>Empty Object<br/>{}"]
+    HC1["HC1<br/><br/>Has: x<br/>{ x }"]
+    HC2["HC2<br/><br/>Has: x, y<br/>{ x, y }"]
+    HC3["HC3<br/><br/>Has: x, y, z<br/>{ x, y, z }"]
+
+    HC0 -->|"add x"| HC1
+    HC1 -->|"add y"| HC2
+    HC2 -->|"add z"| HC3
+
+    style HC0 fill:#3498db,color:#fff
+    style HC1 fill:#2ecc71,color:#fff
+    style HC2 fill:#e67e22,color:#fff
+    style HC3 fill:#e74c3c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<p><strong>الجمال هنا:</strong> لو عملت الـ Objects بنفس الترتيب، بيشاوروا على نفس الـ Hidden Classes! V8 ما بيعملش Hidden Class جديدة لكل Object:</p>
+<pre><code class="language-javascript">const p1 = { x: 1, y: 2 };  // بيعمل HC0 → HC1 → HC2
+const p2 = { x: 3, y: 4 };  // بيشاور مباشرة على HC2 — مفيش عمل جديد!
+const p3 = { x: 5, y: 6 };  // نفس الكلام
+
+// الـ 3 Objects بيشاوروا على نفس الـ HC2
+// V8 عارف إن x في offset+0 وy في offset+8
+// Property Lookup بيبقى O(1) مباشرة بدون بحث!</code></pre>
+<div class="spacer"></div>
+<h3 id="الكارثة-لما-الـ-shape-بتتكسر" class="heading-3">الكارثة: لما الـ Shape بتتكسر</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ❌ Deoptimization في الحصول
+const a = {};
+a.x = 1;   // HC0 → HC1 (x)
+
+const b = {};
+b.y = 1;   // HC0 → HC_y (y) — Transition مختلفة تماماً!
+b.x = 2;   // HC_y → HC_yx (y, x)
+
+// a ── HC1 (x)
+// b ── HC_yx (y, x)
+// رغم إن الاتنين عندهم x وy، بيشاوروا على Hidden Classes مختلفة!
+// V8 مش هيقدر يعمل Optimization مشتركة</code></pre>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    subgraph GOOD["✅ نفس الـ Hidden Class"]
+        HC_GOOD["HC: {x, y}"]
+        OBJ1["p1 = {x:1, y:2}"]
+        OBJ2["p2 = {x:3, y:4}"]
+        OBJ1 --> HC_GOOD
+        OBJ2 --> HC_GOOD
+    end
+
+    subgraph BAD["❌ Hidden Classes مختلفة"]
+        HC_XY["HC: {x, y}"]
+        HC_YX["HC: {y, x}"]
+        OBJ3["a = {}<br/>a.x=1, a.y=2"]
+        OBJ4["b = {}<br/>b.y=1, b.x=2"]
+        OBJ3 --> HC_XY
+        OBJ4 --> HC_YX
+    end
+
+    style GOOD fill:#1a3a1a,color:#fff
+    style BAD fill:#3a1a1a,color:#fff
+    style HC_GOOD fill:#27ae60,color:#fff
+    style HC_XY fill:#e74c3c,color:#fff
+    style HC_YX fill:#e74c3c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="inline-caching-ic-الخدعة-الأسرع" class="heading-3">Inline Caching (IC) — الخدعة الأسرع</h3>
+<div class="spacer"></div>
+<p>الـ Hidden Classes هي الجزء الأول من الخدعة. الجزء التاني هو <strong>Inline Caching</strong>.</p>
+<p>الفكرة: V8 مش بس بيفهم الشكل — هو <strong>بيتذكر</strong> نتيجة كل Property Access في نفس مكان الكود.</p>
+<pre><code class="language-javascript">function getX(obj) {
+    return obj.x;  // ← V8 بيعمل IC هنا
+}</code></pre>
+<div class="spacer"></div>
+<p>أول مرة بيتنادى <code class="inline-code">getX(point1)</code>:</p>
+<p class="callout-list-item">V8 بيدور على <code class="inline-code">x</code> ← بيلاقيه في HC2 في offset+0</p>
+<p class="callout-list-item"><strong>بيخزن</strong> في الـ IC: "لو الـ Object شكله HC2، اتجه لـ offset+0 مباشرة"</p>
+<p>تاني مرة بيتنادى <code class="inline-code">getX(point2)</code>:</p>
+<p class="callout-list-item">V8 بيشوف إن <code class="inline-code">point2</code> شكله HC2</p>
+<p class="callout-list-item"><strong>مباشرة</strong> بيروح لـ offset+0 — مفيش lookup خالص!</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    CALL["getX(obj)"]
+    CHECK{"شكل obj = HC2؟"}
+    FAST["✅ Monomorphic IC<br/><br/>اتجه لـ offset+0 مباشرة<br/>Super Fast!"]
+    LOOKUP["❌ Slow Path<br/><br/>دور على x<br/>في شكل جديد"]
+    UPDATE["تحديث الـ IC<br/>Polymorphic / Megamorphic"]
+
+    CALL --> CHECK
+    CHECK -->|"آه"| FAST
+    CHECK -->|"لأ"| LOOKUP
+    LOOKUP --> UPDATE
+
+    style FAST fill:#27ae60,color:#fff
+    style LOOKUP fill:#e74c3c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="أنواع-الـ-ic" class="heading-3">أنواع الـ IC</h3>
+<div class="spacer"></div>
+<table class="styled-table"><thead><tr>
+<th>النوع</th>
+<th>المعنى</th>
+<th>الأداء</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Uninitialized</strong></td>
+<td>أول مرة — لسه مفيش معلومات</td>
+<td>بطيء</td>
+</tr>
+<tr>
+<td><strong>Monomorphic</strong></td>
+<td>دايماً نفس الـ Shape</td>
+<td>🚀 الأسرع</td>
+</tr>
+<tr>
+<td><strong>Polymorphic</strong></td>
+<td>2-4 Shapes مختلفة</td>
+<td>معقول</td>
+</tr>
+<tr>
+<td><strong>Megamorphic</strong></td>
+<td>أكتر من 4 Shapes</td>
+<td>🐢 الأبطأ — V8 استسلم</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<h3 id="العواقب-العملية-قواعد-الـ-architect" class="heading-3">العواقب العملية — قواعد الـ Architect</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ✅ قاعدة 1: عرّف كل الـ Properties في الـ Constructor
+class Good {
+    constructor(x, y) {
+        this.x = x;      // ← كل الـ Properties موجودة من الأول
+        this.y = y;      // ← V8 بيعمل HC واحد ثابت
+        this.visible = true;
+    }
+}
+
+// ❌ ضد القاعدة: إضافة Properties بعدين
+class Bad {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+    }
+
+    show() {
+        this.visible = true;  // ← بيكسر الـ HC بعد الـ Constructor!
+    }
+}</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ✅ قاعدة 2: نفس الترتيب دايماً
+function createPoint(x, y) {
+    return { x, y };  // ترتيب ثابت
+}
+
+// ❌ ضد القاعدة: ترتيب مختلف حسب conditions
+function createConfig(options) {
+    const config = {};
+    if (options.debug) config.debug = true;  // أحياناً موجودة أحياناً لأ
+    config.host = options.host;
+    config.port = options.port;
+    // كل Object هيبقى ليه HC مختلفة!
+    return config;
+}
+
+// ✅ الحل:
+function createConfigGood(options) {
+    return {
+        debug: options.debug || false,  // دايماً موجودة (قيمتها false لو مش موجودة)
+        host: options.host,
+        port: options.port,
+    };
+}</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ✅ قاعدة 3: متعدلش Type الـ Property
+const obj = { count: 0 };     // count: number ← V8 بيعمل optimization
+obj.count = "five";            // ❌ اتغير من number لـ string — Deoptimization!
+
+// ✅ خليها نفس الـ Type دايماً
+obj.count = 5;                 // ← كويس، لسه number</code></pre>
+<div class="spacer"></div>
+<h3 id="ليه-literal-أسرع-من-objectcreate" class="heading-3">ليه <code class="inline-code">{}</code> Literal أسرع من Object.create؟</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// سريع — V8 بيعمل HC فوراً
+const a = { x: 1, y: 2 };
+
+// أبطأ شوية — إنشاء Prototype Chain تقيل
+const b = Object.create(proto);
+b.x = 1;
+b.y = 2;
+
+// الأسرع على الإطلاق لمصفوفة من Objects متشابهة
+class Point {
+    constructor(x, y) { this.x = x; this.y = y; }
+}
+// ← كل الـ Instances بيشاروا على نفس الـ HC</code></pre>
+<div class="spacer"></div>
+<h3 id="debugging-إزاي-تشوف-الـ-hidden-classes" class="heading-3">Debugging: إزاي تشوف الـ Hidden Classes</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// Node.js: شغّل بـ --allow-natives-syntax
+// ثم:
+%DebugPrint(obj);  // بيطبع معلومات الـ HC
+%OptimizeFunctionOnNextCall(fn);  // بيجبر V8 يعمل Optimize
+%GetOptimizationStatus(fn);       // بيقولك هل اتعمل Optimize ولا لأ</code></pre>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="3-garbage-collection-algorithms" class="heading-2">3. Garbage Collection Algorithms</h2>
+<div class="spacer"></div>
+<h3 id="مين-بيمسح-الـ-objects-الميتة" class="heading-3">مين بيمسح الـ Objects الميتة؟</h3>
+<div class="spacer"></div>
+<p>لما بتعمل Object وما بتحتاجهوش تاني، V8 محتاج يشيله من الـ Heap. ده الـ <strong>Garbage Collector</strong>. المشكلة: V8 مش يعرف إنت تعبت من الـ Object ولا لأ إلا بطريقة واحدة — <strong>يشوف مين لسه شايل Reference ليه</strong>.</p>
+<h3 id="المفهوم-الأساسي-reachability" class="heading-3">المفهوم الأساسي: Reachability</h3>
+<div class="spacer"></div>
+<p>الفكرة بسيطة جداً: Object "حي" لو فيه طريق وصال ليه من الـ <strong>GC Roots</strong>. Object "ميت" لو محدش بيشاور عليه.</p>
+<p><strong>الـ GC Roots هي:</strong></p>
+<p class="callout-list-item">الـ Global Variables</p>
+<p class="callout-list-item">الـ Call Stack (المتغيرات المحلية في الـ Functions الشغالة)</p>
+<p class="callout-list-item">الـ CPU Registers</p>
+<p class="callout-list-item">الـ Built-in Objects</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    ROOT["🌳 GC Roots<br/><br/>Global vars<br/>Call Stack<br/>Registers"]
+
+    A["Object A<br/>✅ Reachable"]
+    B["Object B<br/>✅ Reachable"]
+    C["Object C<br/>✅ Reachable"]
+    D["Object D<br/>❌ Unreachable<br/>هيتمسح!"]
+    E["Object E<br/>❌ Unreachable<br/>هيتمسح!"]
+
+    ROOT --> A
+    ROOT --> B
+    A --> C
+    D --> E
+
+    style ROOT fill:#2c3e50,color:#fff
+    style A fill:#27ae60,color:#fff
+    style B fill:#27ae60,color:#fff
+    style C fill:#27ae60,color:#fff
+    style D fill:#e74c3c,color:#fff
+    style E fill:#e74c3c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="الـ-algorithm-الأساسي-mark-sweep" class="heading-3">الـ Algorithm الأساسي: Mark & Sweep</h3>
+<div class="spacer"></div>
+<p>الـ Mark & Sweep هو أقدم وأشهر GC Algorithm. بيشتغل في مرحلتين:</p>
+<p><strong>المرحلة الأولى: Mark (التعليم)</strong></p>
+<p>V8 بيبدأ من الـ GC Roots وبيعمل Graph Traversal (زي BFS أو DFS) على كل الـ Objects. كل Object بيوصله بيعلم عليه "Alive".</p>
+<p><strong>المرحلة التانية: Sweep (الكنس)</strong></p>
+<p>V8 بيعدي على كل الـ Heap. كل Object مش معلم عليه "Alive" — بيتمسح. المكان اللي اتفرغ بيتحط في "Free List" عشان يتملي بـ Objects جديدة.</p>
+<div class="mermaid-wrap"><div class="mermaid">graph LR
+    subgraph BEFORE["قبل الـ GC"]
+        ROOT1["Root"] --> OA["A ✅"]
+        ROOT1 --> OB["B ✅"]
+        OA --> OC["C ✅"]
+        OD["D ❌"]
+        OE["E ❌"]
+        OD --> OE
+    end
+
+    subgraph AFTER["بعد Mark & Sweep"]
+        ROOT2["Root"] --> OA2["A ✅"]
+        ROOT2 --> OB2["B ✅"]
+        OA2 --> OC2["C ✅"]
+        FREE1["⬜ Free Space"]
+        FREE2["⬜ Free Space"]
+    end
+
+    style ROOT1 fill:#2c3e50,color:#fff
+    style ROOT2 fill:#2c3e50,color:#fff
+    style OD fill:#e74c3c,color:#fff
+    style OE fill:#e74c3c,color:#fff
+    style FREE1 fill:#95a5a6,color:#fff
+    style FREE2 fill:#95a5a6,color:#fff
+</div></div>
+<div class="spacer"></div>
+<p><strong>المشكلة مع Mark & Sweep:</strong> بعد فترة، الـ Heap بيبقى "مثقوب" — فراغات هنا وهناك. الـ <strong>Fragmentation</strong> دي بتخلي V8 يصعب عليه يلاقي مكان متواصل لـ Object كبير. الحل هو إضافة مرحلة تالتة:</p>
+<p><strong>المرحلة التالتة: Compact (الضغط)</strong></p>
+<p>V8 بيحرك الـ Objects الحية لتكون جنب بعض وبيمسح الـ Fragmentation. بس النقل ده تقيل — محتاج يحدّث كل الـ References اللي بتشاور على الـ Objects دي.</p>
+<h3 id="الـ-generational-gc-الخدعة-العبقرية" class="heading-3">الـ Generational GC: الخدعة العبقرية</h3>
+<div class="spacer"></div>
+<p>المشاهدة: <strong>معظم الـ Objects بتموت بسرعة جداً.</strong></p>
+<pre><code class="language-javascript">function processRequest(req) {
+    const temp = { data: req.body };    // ← هيموت في نفس الـ function
+    const result = transform(temp);     // ← هيموت بعد السطر ده
+    return result;
+}
+// temp و result بيتخلقوا ويموتوا في ثواني</code></pre>
+<div class="spacer"></div>
+<p>الـ <strong>Generational Hypothesis</strong> بتقول: لو Object عاش لفترة، الأرجح هيعيش أطول. ومعظم الـ Objects بتموت شابة.</p>
+<p>V8 استغل ده بتقسيم الـ Heap لـ <strong>جيلين</strong>:</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    subgraph NEW_GEN["🐣 Young Generation (New Space)<br/>صغير ~8MB — GC سريع جداً"]
+        NURSERY["Nursery<br/>أول ما Object بيتخلق"]
+        INTER["Intermediate<br/>عاش Minor GC واحد"]
+    end
+
+    subgraph OLD_GEN["👴 Old Generation (Old Space)<br/>كبير — GC أبطأ"]
+        OLD["Old Objects<br/>عاشوا 2 Minor GC"]
+    end
+
+    NEW["Object جديد"] --> NURSERY
+    NURSERY -->|"عاش Minor GC 1"| INTER
+    INTER -->|"عاش Minor GC 2"| OLD
+    NURSERY -->|"مات"| DEAD1["🗑️ يتمسح"]
+    INTER -->|"مات"| DEAD2["🗑️ يتمسح"]
+
+    style NEW_GEN fill:#1a2a3a,color:#fff
+    style OLD_GEN fill:#2a1a1a,color:#fff
+    style DEAD1 fill:#555,color:#fff
+    style DEAD2 fill:#555,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="minor-gc-الـ-scavenger-السريع-والعنيف" class="heading-3">Minor GC — الـ Scavenger: السريع والعنيف</h3>
+<div class="spacer"></div>
+<p>الـ <strong>Minor GC</strong> (أو Scavenger) بيشتغل على الـ Young Generation بس. الـ Algorithm المستخدم هو <strong>Cheney's Algorithm</strong> وهو عبقري جداً:</p>
+<p><strong>الفكرة:</strong> عندك مساحتين (From-Space و To-Space). Objects الجديدة بتتخلق في الـ From-Space. لما بيتملى، الـ GC بيعدي على الـ Live Objects بس وبينقلهم لـ To-Space. بعدين بيمسح الـ From-Space كله مرة واحدة (مش بيتبعر في الـ Fragmentation). بعدين From وTo بيتبادلوا.</p>
+<div class="mermaid-wrap"><div class="mermaid">graph LR
+    subgraph BEFORE["قبل Minor GC"]
+        FS["From-Space<br/>A✅ B❌ C✅ D❌ E✅<br/>[ممتلئ]"]
+        TS["To-Space<br/>[فاضي]"]
+    end
+
+    ARROW["Minor GC يشتغل"]
+
+    subgraph AFTER["بعد Minor GC"]
+        FS2["From-Space<br/>[يتمسح كله]<br/>← بيبقى To-Space الجديد"]
+        TS2["To-Space<br/>A✅ C✅ E✅<br/>متواصلين بدون فراغات"]
+    end
+
+    BEFORE --> ARROW --> AFTER
+
+    style FS fill:#e74c3c,color:#fff
+    style TS2 fill:#27ae60,color:#fff
+</div></div>
+<div class="spacer"></div>
+<p><strong>ليه ده عبقري؟</strong></p>
+<p class="callout-list-item"><strong>سريع جداً:</strong> بس بيشتغل على Objects الحية (اللي غالباً قليلة)</p>
+<p class="callout-list-item"><strong>مش فيه Fragmentation:</strong> الـ To-Space بيبقى متواصل</p>
+<p class="callout-list-item"><strong>Stop-The-World أقل:</strong> الـ Young Generation صغير → GC بيخلص بسرعة → الكود بيوقف لأقل وقت</p>
+<h3 id="major-gc-mark-sweep-compact-البطيء-والشامل" class="heading-3">Major GC — Mark-Sweep-Compact: البطيء والشامل</h3>
+<div class="spacer"></div>
+<p>الـ <strong>Major GC</strong> بيشتغل على الـ Old Generation. هنا الـ Objects كبيرة وكتير، فالـ GC بياخد وقت أطول.</p>
+<p>المشكلة الكبيرة: <strong>Stop-The-World (STW)</strong>. أثناء الـ GC، الـ Main Thread بيوقف كله — مفيش JS بيشتغل. في Old Generation الكبيرة، ده ممكن يكون بالمللي ثانية الكتير.</p>
+<p>V8 حل ده بعدة تقنيات:</p>
+<h4 id="incremental-marking" class="heading-4">Incremental Marking</h4>
+<div class="spacer"></div>
+<p>بدل ما يعمل الـ Mark خطوة واحدة ويوقف العالم، V8 بيعمل الـ Marking على شرايح صغيرة — بين كل شريحة بيدي للـ JS وقت يشتغل.</p>
+<pre><code class="language-javascript">قديماً: ────────────────GC──────────────────►
+                        ↑ Stop-The-World طويل
+
+بـ Incremental:
+────JS────[GC]────JS────[GC]────JS────[GC]────►
+           ↑ شرايح صغيرة — توقف قصير لكل واحدة</code></pre>
+<div class="spacer"></div>
+<h4 id="concurrent-marking-v8-الحديث" class="heading-4">Concurrent Marking (V8 الحديث)</h4>
+<div class="spacer"></div>
+<p>V8 بدأ يعمل الـ Marking على Background Threads بالتوازي مع الـ JS! يعني الـ Main Thread مستمر وفي نفس الوقت Thread تانية بتعلم على الـ Objects.</p>
+<pre><code class="language-javascript">Main Thread:   ────────────JS شغال بالكامل────────────►
+GC Thread:     ─────────[Marking في الخلفية]──────────►
+الدمج: بيوقف بس لفترة قصيرة في النهاية عشان يتحقق</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-write-barrier-ضمان-الصحة" class="heading-3">الـ Write Barrier — ضمان الصحة</h3>
+<div class="spacer"></div>
+<p>لما الـ Concurrent Marking شغال، ممكن الـ JS يغير References وهو شغال:</p>
+<pre><code class="language-javascript">// GC يكون عملها Mark على obj1 إنها "Live"
+// JS بعدين بيعمل:
+obj1.ref = null;        // فصل Reference
+obj2.ref = liveObject;  // ضاف Reference جديدة
+
+// GC الـ liveObject شافه من أول؟ ولا مش شايفه بعدين؟</code></pre>
+<div class="spacer"></div>
+<p>الحل هو <strong>Write Barrier</strong> — كود صغير جداً بيشتغل مع كل Write Operation ويبلغ الـ GC إن في Reference اتغيرت. V8 يحتاج يرجع يفحص التغييرات دي.</p>
+<h3 id="الـ-tri-color-marking" class="heading-3">الـ Tri-Color Marking</h3>
+<div class="spacer"></div>
+<p>علشان يتعامل مع الـ Incremental والـ Concurrent Marking، V8 بيستخدم <strong>Tri-Color Algorithm</strong>:</p>
+<table class="styled-table"><thead><tr>
+<th>اللون</th>
+<th>المعنى</th>
+</tr></thead><tbody>
+<tr>
+<td>⬜ White</td>
+<td>مش اتزارش بعد — ميت لحد ما يثبت العكس</td>
+</tr>
+<tr>
+<td>🔵 Gray</td>
+<td>اتزار بس الـ References بتاعته لسه متفحصتش</td>
+</tr>
+<tr>
+<td>⬛ Black</td>
+<td>اتزار وكل الـ References بتاعته اتفحصت</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<pre><code class="language-javascript">البداية: كل Objects بـ White
+
+GC Roots ─► تتحول لـ Gray (ضفها لـ Queue)
+
+Loop:
+  خد Gray Object من الـ Queue
+  ضيفه References (Children) لـ Gray
+  حوله لـ Black
+
+النهاية: White Objects = ميتة → تتمسح
+         Black Objects = حية → تفضل</code></pre>
+<div class="spacer"></div>
+<h3 id="مثال-كامل-من-الكود-للـ-gc" class="heading-3">مثال كامل: من الكود للـ GC</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">function createOrder(userId) {
+    // ── كل ده بيتخلق في الـ Young Generation ──
+    const items = [];                    // Array في الـ Heap
+    const user = fetchUser(userId);     // Object في الـ Heap
+    const discount = calculateDiscount(user); // Primitive في الـ Stack
+
+    for (let i = 0; i &lt; 100; i++) {
+        const item = { id: i, price: 10 * i }; // 100 Object في الـ Young Gen
+        items.push(item);
+    }
+
+    const order = {
+        userId,
+        items,
+        total: items.reduce((s, i) =&gt; s + i.price, 0),
+        createdAt: new Date()  // Date Object في الـ Heap
+    };
+
+    return order;
+    // لما الـ function تخلص:
+    // - items reference بيتشال من الـ Stack
+    // - user reference بيتشال من الـ Stack
+    // - الـ items Array نفسها ← لو order.items بيشاور عليها = حية
+    // - الـ 100 item Objects ← حية لأن order.items بيشاور عليها
+    // - user Object ← مش محدش بيشاور عليه = ميت في الـ Minor GC الجاي
+    // - discount ← Primitive في الـ Stack، اتشال مع الـ Frame
+}
+
+const myOrder = createOrder("user123");
+// myOrder في الـ Global Scope → مش هيتمسح
+// بعد فترة لو عملت:
+// myOrder = null;
+// ← Order Object ومحتوياته هيبقوا Unreachable → GC هيمسحهم</code></pre>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<div class="spacer"></div></div></section>
+<section id="section-6" class="content-section" style="display:none"><div class="section-header"><h1 class="section-title">Module 9</h1><p class="section-subtitle">🔣 Symbols & Well-Known Protocols</p></div><div class="section-body">
+<h2 id="5-symbols-البروتوكولات-الخفية-للغة" class="heading-2">5. Symbols — البروتوكولات الخفية للغة</h2>
+<div class="spacer"></div>
+<h3 id="symbol-مش-بس-unique-id" class="heading-3">Symbol مش بس "Unique ID"</h3>
+<div class="spacer"></div>
+<p>معظم الناس بتتعلم إن <code class="inline-code">Symbol()</code> بينتج "Unique Key مضمون مش هيتكرر". ده صح، بس ده أضعف 10% من قوة الـ Symbol. الـ 90% التانية هم الـ <strong>Well-Known Symbols</strong> — البروتوكولات الخفية اللي بتتحكم في سلوك اللغة نفسها.</p>
+<h3 id="الـ-symbol-الأساسي" class="heading-3">الـ Symbol الأساسي</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// كل Symbol فريد حتى لو نفس الـ Description
+const s1 = Symbol("user");
+const s2 = Symbol("user");
+console.log(s1 === s2); // false — فريدين تماماً
+
+// لاستخدامه كـ Key في Object
+const ID = Symbol("id");
+const user = {
+    [ID]: 123,           // ← مش بيظهر في for...in
+    name: "Ahmed",
+};
+
+console.log(user[ID]);  // 123
+console.log(user.ID);   // undefined — مش String
+
+// بيظهر بس بـ:
+Object.getOwnPropertySymbols(user); // [Symbol(id)]
+Reflect.ownKeys(user);              // ["name", Symbol(id)]</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-global-symbol-registry" class="heading-3">الـ Global Symbol Registry</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// Symbol.for() بيعمل أو يرجع نفس الـ Symbol من Registry عالمي
+const s1 = Symbol.for("shared");
+const s2 = Symbol.for("shared");
+console.log(s1 === s2); // true! — نفس الـ Symbol
+
+// مفيد لمشاركة Symbols بين Modules أو Libraries
+// Symbol.keyFor() بيرجع الـ Key
+console.log(Symbol.keyFor(s1)); // "shared"
+console.log(Symbol.keyFor(Symbol())); // undefined — مش في الـ Registry</code></pre>
+<div class="spacer"></div>
+<h3 id="well-known-symbols-لغة-تتكلم-مع-نفسها" class="heading-3">Well-Known Symbols — لغة تتكلم مع نفسها</h3>
+<div class="spacer"></div>
+<p>الـ <strong>Well-Known Symbols</strong> هم Symbols موجودة في <code class="inline-code">Symbol</code> كـ Properties ثابتة. V8 بيبص عليهم في Objects عشان يحدد السلوك.</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    WKS["Well-Known Symbols<br/><br/>بروتوكولات اللغة"]
+
+    ITER["Symbol.iterator<br/>بيتحكم في for...of<br/>والـ Spread Operator"]
+
+    TOSTR["Symbol.toPrimitive<br/>بيتحكم في التحويل<br/>لـ Primitive"]
+
+    HASINST["Symbol.hasInstance<br/>بيتحكم في instanceof"]
+
+    SPECIES["Symbol.species<br/>بيتحكم في نوع<br/>الناتج في subclasses"]
+
+    ASYNCITER["Symbol.asyncIterator<br/>بيتحكم في for await...of"]
+
+    TOSTRN["Symbol.toStringTag<br/>بيتحكم في Object.prototype.toString"]
+
+    WKS --> ITER
+    WKS --> TOSTR
+    WKS --> HASINST
+    WKS --> SPECIES
+    WKS --> ASYNCITER
+    WKS --> TOSTRN
+
+    style WKS fill:#2c3e50,color:#fff
+    style ITER fill:#3498db,color:#fff
+    style TOSTR fill:#e67e22,color:#fff
+    style HASINST fill:#8e44ad,color:#fff
+    style SPECIES fill:#27ae60,color:#fff
+    style ASYNCITER fill:#1abc9c,color:#fff
+    style TOSTRN fill:#e74c3c,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="symboliterator-اعمل-حاجة-iterable" class="heading-3">Symbol.iterator — اعمل حاجة Iterable</h3>
+<div class="spacer"></div>
+<p>كل Object بيعمل <code class="inline-code">for...of</code> عليه لازم يكون Iterable. الـ Arrays والـ Strings والـ Maps والـ Sets كلها Iterable لأنها عندها <code class="inline-code">Symbol.iterator</code>.</p>
+<pre><code class="language-javascript">// ── إزاي بيشتغل for...of ──────────────────────────────────
+const arr = [1, 2, 3];
+
+// الـ for...of بيعمل:
+const iterator = arr[Symbol.iterator](); // بيجيب الـ Iterator
+let result = iterator.next();
+while (!result.done) {
+    console.log(result.value); // 1, 2, 3
+    result = iterator.next();
+}
+
+// ── بناء Iterable من الصفر ────────────────────────────────
+class Range {
+    constructor(start, end, step = 1) {
+        this.start = start;
+        this.end = end;
+        this.step = step;
+    }
+
+    [Symbol.iterator]() {
+        // لازم يرجع Iterator object
+        let current = this.start;
+        const end = this.end;
+        const step = this.step;
+
+        return {
+            next() {
+                if (current &lt;= end) {
+                    const value = current;
+                    current += step;
+                    return { value, done: false };
+                }
+                return { value: undefined, done: true };
+            }
+        };
+    }
+}
+
+const range = new Range(1, 10, 2);
+for (const num of range) {
+    console.log(num); // 1, 3, 5, 7, 9
+}
+
+// بيشتغل مع Spread
+console.log([...new Range(1, 5)]); // [1, 2, 3, 4, 5]
+
+// بيشتغل مع Destructuring
+const [first, second, ...rest] = new Range(1, 10);
+console.log(first);  // 1
+console.log(second); // 2
+console.log(rest);   // [3, 4, 5, 6, 7, 8, 9, 10]</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── Generator كـ Iterator (الطريقة الأسهل) ────────────────
+class InfiniteCounter {
+    constructor(start = 0) {
+        this.start = start;
+    }
+
+    *[Symbol.iterator]() {  // ← * = Generator Function
+        let n = this.start;
+        while (true) {
+            yield n++;
+        }
+    }
+}
+
+const counter = new InfiniteCounter(5);
+const first10 = [...counter].slice(0, 10);  // ❌ هيلف للأبد!
+
+// بدل كده:
+for (const n of counter) {
+    if (n &gt; 15) break;  // ← لازم يكون عندك break condition
+    console.log(n);  // 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+}</code></pre>
+<div class="spacer"></div>
+<h3 id="symboltoprimitive-تحكم-في-التحويل" class="heading-3">Symbol.toPrimitive — تحكم في التحويل</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── المشكلة بدون toPrimitive ──────────────────────────────
+class Temperature {
+    constructor(celsius) {
+        this.celsius = celsius;
+    }
+}
+
+const t = new Temperature(25);
+console.log(t + 5);   // "[object Object]5" — مش مفيد
+console.log(t &gt; 20);  // true بس بطريقة غلط
+
+// ── الحل بـ Symbol.toPrimitive ────────────────────────────
+class Temperature {
+    constructor(celsius) {
+        this.celsius = celsius;
+    }
+
+    [Symbol.toPrimitive](hint) {
+        // hint = "number" | "string" | "default"
+        if (hint === "number") {
+            return this.celsius;  // للعمليات الحسابية
+        }
+        if (hint === "string") {
+            return `${this.celsius}°C`;  // للطباعة
+        }
+        // "default": للـ == والـ +
+        return this.celsius;
+    }
+}
+
+const temp = new Temperature(25);
+
+// "number" hint:
+console.log(temp + 5);   // 30
+console.log(temp * 2);   // 50
+console.log(temp &gt; 20);  // true
+
+// "string" hint:
+console.log(`درجة الحرارة: ${temp}`);  // "درجة الحرارة: 25°C"
+console.log(String(temp));              // "25°C"
+
+// "default" hint:
+console.log(temp == 25);  // true</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── مثال أقوى: Money Class ────────────────────────────────
+class Money {
+    constructor(amount, currency = "EGP") {
+        this.amount = amount;
+        this.currency = currency;
+    }
+
+    [Symbol.toPrimitive](hint) {
+        if (hint === "number") return this.amount;
+        if (hint === "string") return `${this.amount} ${this.currency}`;
+        return this.amount;
+    }
+
+    add(other) {
+        if (this.currency !== other.currency) {
+            throw new Error("مش نفس العملة!");
+        }
+        return new Money(this.amount + other.amount, this.currency);
+    }
+
+    toString() {
+        return `${this.amount} ${this.currency}`;
+    }
+}
+
+const price = new Money(100);
+const tax = new Money(14);
+const total = price.add(tax);
+
+console.log(total.toString());    // "114 EGP"
+console.log(total &gt; 100);        // true (number hint)
+console.log(`الإجمالي: ${total}`); // "الإجمالي: 114 EGP" (string hint)</code></pre>
+<div class="spacer"></div>
+<h3 id="symbolhasinstance-تحكم-في-instanceof" class="heading-3">Symbol.hasInstance — تحكم في instanceof</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">class EvenNumber {
+    // ← لاحظ: static method
+    static [Symbol.hasInstance](num) {
+        return Number.isInteger(num) && num % 2 === 0;
+    }
+}
+
+console.log(2 instanceof EvenNumber);   // true
+console.log(3 instanceof EvenNumber);   // false
+console.log(4 instanceof EvenNumber);   // true
+console.log("hello" instanceof EvenNumber); // false</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// مثال أقوى: Type Checking Library
+class TypeChecker {
+    #validator;
+
+    constructor(validator) {
+        this.#validator = validator;
+    }
+
+    [Symbol.hasInstance](value) {
+        return this.#validator(value);
+    }
+}
+
+const isPositiveNumber = new TypeChecker(
+    v =&gt; typeof v === "number" && v &gt; 0
+);
+
+const isNonEmptyString = new TypeChecker(
+    v =&gt; typeof v === "string" && v.length &gt; 0
+);
+
+console.log(42 instanceof isPositiveNumber);     // true
+console.log(-5 instanceof isPositiveNumber);     // false
+console.log("hello" instanceof isNonEmptyString); // true
+console.log("" instanceof isNonEmptyString);     // false</code></pre>
+<div class="spacer"></div>
+<h3 id="symbolasynciterator-لـ-async-streams" class="heading-3">Symbol.asyncIterator — لـ Async Streams</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">class AsyncDataStream {
+    constructor(data, delay = 100) {
+        this.data = data;
+        this.delay = delay;
+    }
+
+    async *[Symbol.asyncIterator]() {
+        for (const item of this.data) {
+            // محاكاة جلب Async
+            await new Promise(resolve =&gt; setTimeout(resolve, this.delay));
+            yield item;
+        }
+    }
+}
+
+const stream = new AsyncDataStream([
+    { id: 1, name: "Ahmed" },
+    { id: 2, name: "Sara" },
+    { id: 3, name: "Ali" },
+]);
+
+async function processStream() {
+    for await (const user of stream) {
+        console.log(`جالي User: ${user.name}`);
+    }
+    console.log("خلصنا!");
+}
+
+processStream();
+// بعد 100ms: "جالي User: Ahmed"
+// بعد 200ms: "جالي User: Sara"
+// بعد 300ms: "جالي User: Ali"
+// "خلصنا!"</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// Real-world مثال: Paginated API
+class PaginatedAPI {
+    constructor(endpoint, pageSize = 20) {
+        this.endpoint = endpoint;
+        this.pageSize = pageSize;
+    }
+
+    async *[Symbol.asyncIterator]() {
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore) {
+            const response = await fetch(
+                `${this.endpoint}?page=${page}&size=${this.pageSize}`
+            );
+            const { data, total } = await response.json();
+
+            for (const item of data) {
+                yield item;
+            }
+
+            hasMore = page * this.pageSize &lt; total;
+            page++;
+        }
+    }
+}
+
+// الاستخدام:
+const api = new PaginatedAPI("https://api.example.com/users");
+
+for await (const user of api) {
+    await processUser(user);  // بيعمل Pagination أوتوماتيك
+}</code></pre>
+<div class="spacer"></div>
+<h3 id="symboltostringtag-تغيير-اسم-الـ-type" class="heading-3">Symbol.toStringTag — تغيير اسم الـ Type</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// المشكلة:
+class UserService {}
+const service = new UserService();
+Object.prototype.toString.call(service);  // "[object Object]" — مش مفيد
+
+// الحل:
+class UserService {
+    get [Symbol.toStringTag]() {
+        return "UserService";
+    }
+}
+
+const service = new UserService();
+Object.prototype.toString.call(service);  // "[object UserService]"
+console.log(`${service}`);  // بعض المحيطات بتستخدمه
+
+// مفيد جداً في الـ Debugging</code></pre>
+<div class="spacer"></div>
+<h3 id="symbolspecies-تحكم-في-نوع-الناتج" class="heading-3">Symbol.species — تحكم في نوع الناتج</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// المشكلة: subclass بيورث methods بيرجعوا الـ parent class!
+class SpecialArray extends Array {
+    sum() {
+        return this.reduce((a, b) =&gt; a + b, 0);
+    }
+}
+
+const special = new SpecialArray(1, 2, 3, 4, 5);
+const doubled = special.map(x =&gt; x * 2);
+
+console.log(doubled instanceof SpecialArray);  // true — بيرجع SpecialArray
+console.log(doubled.sum());                    // 30 — الـ sum method موجودة
+
+// ── تغيير السلوك بـ Symbol.species ──────────────────────────
+class MyArray extends Array {
+    static get [Symbol.species]() {
+        return Array;  // ← map/filter/slice هترجع Array عادية، مش MyArray
+    }
+
+    sum() {
+        return this.reduce((a, b) =&gt; a + b, 0);
+    }
+}
+
+const myArr = new MyArray(1, 2, 3);
+const mapped = myArr.map(x =&gt; x * 2);
+
+console.log(mapped instanceof MyArray); // false! — رجع Array عادية
+console.log(mapped instanceof Array);   // true
+// mapped.sum() ← undefined — مش موجودة في Array عادية</code></pre>
+<div class="spacer"></div>
+<h3 id="تركيب-الـ-symbols-مع-بعض-بناء-protocol-كامل" class="heading-3">تركيب الـ Symbols مع بعض: بناء Protocol كامل</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// بنبني Collection Class ليها Protocol كامل
+class SortedList {
+    #items = [];
+    #compareFn;
+
+    constructor(compareFn = (a, b) =&gt; a - b) {
+        this.#compareFn = compareFn;
+    }
+
+    add(item) {
+        this.#items.push(item);
+        this.#items.sort(this.#compareFn);
+        return this;
+    }
+
+    remove(item) {
+        const idx = this.#items.indexOf(item);
+        if (idx !== -1) this.#items.splice(idx, 1);
+        return this;
+    }
+
+    // ── Iterable Protocol ──────────────────────────────────
+    [Symbol.iterator]() {
+        return this.#items[Symbol.iterator]();
+    }
+
+    // ── Primitive Conversion ───────────────────────────────
+    [Symbol.toPrimitive](hint) {
+        if (hint === "number") return this.#items.length;
+        if (hint === "string") return `SortedList[${this.#items}]`;
+        return this.#items.length;
+    }
+
+    // ── instanceof check ───────────────────────────────────
+    static [Symbol.hasInstance](obj) {
+        return obj instanceof SortedList;
+    }
+
+    // ── toString tag ───────────────────────────────────────
+    get [Symbol.toStringTag]() {
+        return "SortedList";
+    }
+
+    get size() {
+        return this.#items.length;
+    }
+}
+
+// الاستخدام
+const list = new SortedList();
+list.add(5).add(3).add(8).add(1).add(4);
+
+// Iteration
+for (const item of list) {
+    process.stdout.write(item + " ");
+}
+// 1 3 4 5 8
+
+// Spread
+console.log([...list]);  // [1, 3, 4, 5, 8]
+
+// Destructuring
+const [min, , , , max] = list;
+console.log(min, max);  // 1 8
+
+// Primitive conversion
+console.log(`الـ List عندها ${list} عنصر`);  // "الـ List عندها 5 عنصر"
+console.log(list &gt; 3);                         // true (5 &gt; 3)
+
+// Type check
+console.log(list instanceof SortedList);  // true
+console.log(Object.prototype.toString.call(list));  // "[object SortedList]"</code></pre>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<div class="spacer"></div></div></section>
+<section id="section-7" class="content-section" style="display:none"><div class="section-header"><h1 class="section-title">Module 10</h1><p class="section-subtitle">🎯 Functional Programming Masterclass</p></div><div class="section-body">
+<h2 id="1-compose-vs-pipe" class="heading-2">1. Compose vs Pipe</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-الكود-المتداخل-اللي-بيجنن" class="heading-3">المشكلة: الكود المتداخل اللي بيجنن</h3>
+<div class="spacer"></div>
+<p>تخيّل معايا إنك شغال على نظام بيعالج بيانات المستخدمين. عندك سلسلة من العمليات: تاخد اسم المستخدم، تنضفه، تعمله capitalize، تضيف greeting، وتعمله trim.</p>
+<pre><code class="language-javascript">// الطريقة العادية — nested hell 😱
+const result = trim(
+    addGreeting(
+        capitalize(
+            clean(
+                getName(user)
+            )
+        )
+    )
+);
+// قرأت ده من جوا لبره؟ طب ليه الكود بيكتب من بره لجوا لو هو هيتنفذ من جوا لبره؟</code></pre>
+<div class="spacer"></div>
+<p>ده مش بس قبيح — هو صعب القراءة، صعب الـ debug، وصعب الإضافة. الـ Functional Programming عندها حل اسمه <strong>Function Composition</strong>.</p>
+<h3 id="الـ-compose-من-اليمين-لليسار" class="heading-3">الـ Compose: من اليمين لليسار</h3>
+<div class="spacer"></div>
+<p>تخيّل الـ <code class="inline-code">compose</code> زي رياضيات المدرسة. في الرياضيات، <code class="inline-code">f(g(x))</code> بتنفذ <code class="inline-code">g</code> الأول وبعدين <code class="inline-code">f</code>. الـ <code class="inline-code">compose</code> بتعمل نفس الكلام:</p>
+<pre><code class="language-javascript">compose(f, g, h)(x)
+        ↑  ↑  ↑
+        │  │  └── h بتشتغل أول (على x)
+        │  └───── g بتشتغل تاني (على نتيجة h)
+        └──────── f بتشتغل أخيراً (على نتيجة g)</code></pre>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── بناء compose من الصفر ────────────────────────────────────
+const compose = (...fns) =&gt; (x) =&gt;
+    fns.reduceRight((acc, fn) =&gt; fn(acc), x);
+    //    ↑
+    //    reduceRight عشان نشتغل من اليمين لليسار
+
+// ── الـ Functions البسيطة ─────────────────────────────────────
+const getName    = (user)  =&gt; user.name;
+const clean      = (str)   =&gt; str.trim().replace(/\s+/g, ' ');
+const capitalize = (str)   =&gt; str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+const addGreeting= (str)   =&gt; `مرحباً يا ${str}!`;
+const exclaim    = (str)   =&gt; str + ' 🎉';
+
+// ── Compose بيربطهم ───────────────────────────────────────────
+const greetUser = compose(
+    exclaim,       // 5. آخر حاجة تشتغل
+    addGreeting,   // 4.
+    capitalize,    // 3.
+    clean,         // 2.
+    getName        // 1. أول حاجة تشتغل (على الـ input)
+);
+
+const user = { name: "  ahmed hassan  " };
+console.log(greetUser(user));
+// "مرحباً يا Ahmed hassan! 🎉"</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-pipe-من-اليسار-لليمين-الأسهل-في-القراءة" class="heading-3">الـ Pipe: من اليسار لليمين (الأسهل في القراءة)</h3>
+<div class="spacer"></div>
+<p>الـ <code class="inline-code">pipe</code> هو نفس الـ <code class="inline-code">compose</code> بس عكسه — الترتيب بتكتبه زي ما بيتنفذ. معظم الـ Developers بيفضلوا الـ <code class="inline-code">pipe</code> لأنه أقرب لطريقة تفكيرنا:</p>
+<pre><code class="language-javascript">// ── بناء pipe من الصفر ─────────────────────────────────────────
+const pipe = (...fns) =&gt; (x) =&gt;
+    fns.reduce((acc, fn) =&gt; fn(acc), x);
+    //  ↑
+    //  reduce عادي — من اليسار لليمين
+
+// ── نفس المثال بـ pipe ─────────────────────────────────────────
+const greetUser = pipe(
+    getName,       // 1. أول حاجة
+    clean,         // 2. تاني
+    capitalize,    // 3. تالت
+    addGreeting,   // 4. رابع
+    exclaim        // 5. آخر حاجة
+);
+
+// الترتيب بيتقرأ عادي من فوق لتحت ✅</code></pre>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">graph LR
+    INPUT["x<br/>(Input)"]
+    F1["getName"]
+    F2["clean"]
+    F3["capitalize"]
+    F4["addGreeting"]
+    F5["exclaim"]
+    OUTPUT["النتيجة النهائية"]
+
+    INPUT -->|"pipe"| F1
+    F1 --> F2
+    F2 --> F3
+    F3 --> F4
+    F4 --> F5
+    F5 --> OUTPUT
+
+    style INPUT fill:#2c3e50,color:#fff
+    style OUTPUT fill:#27ae60,color:#fff
+    style F1 fill:#3498db,color:#fff
+    style F2 fill:#3498db,color:#fff
+    style F3 fill:#3498db,color:#fff
+    style F4 fill:#3498db,color:#fff
+    style F5 fill:#3498db,color:#fff
+</div></div>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">graph RL
+    INPUT["x<br/>(Input)"]
+    F1["getName"]
+    F2["clean"]
+    F3["capitalize"]
+    F4["addGreeting"]
+    F5["exclaim"]
+    OUTPUT["النتيجة النهائية"]
+
+    OUTPUT --> F5
+    F5 --> F4
+    F4 --> F3
+    F3 --> F2
+    F2 --> F1
+    F1 --> INPUT
+
+    style INPUT fill:#2c3e50,color:#fff
+    style OUTPUT fill:#e74c3c,color:#fff
+    style F1 fill:#8e44ad,color:#fff
+    style F2 fill:#8e44ad,color:#fff
+    style F3 fill:#8e44ad,color:#fff
+    style F4 fill:#8e44ad,color:#fff
+    style F5 fill:#8e44ad,color:#fff
+</div></div>
+<div class="spacer"></div>
+<h3 id="الـ-arity-problem-لما-function-بتاخد-أكتر-من-argument-واحد" class="heading-3">الـ Arity Problem: لما Function بتاخد أكتر من Argument واحد</h3>
+<div class="spacer"></div>
+<p>المشكلة الكبيرة في الـ Composition إن كل Function لازم تاخد <strong>argument واحد بس</strong> وترجع <strong>قيمة واحدة</strong>. طب لو عندي Function بتاخد اتنين؟ هنا بييجي دور الـ <strong>Currying</strong>:</p>
+<pre><code class="language-javascript">// ── Currying بيحل مشكلة الـ Multi-Argument Functions ──────────
+const curry = (fn) =&gt; {
+    const arity = fn.length; // عدد الـ Arguments المتوقعة
+    return function curried(...args) {
+        if (args.length &gt;= arity) {
+            return fn.apply(this, args); // عندنا كفاية — نشتغل
+        }
+        return (...moreArgs) =&gt; curried(...args, ...moreArgs); // لسه ناقص — نستنى
+    };
+};
+
+// ── Functions بتاخد أكتر من Argument ─────────────────────────
+const add        = curry((a, b) =&gt; a + b);
+const multiply   = curry((a, b) =&gt; a * b);
+const filter_    = curry((pred, arr) =&gt; arr.filter(pred));
+const map_       = curry((fn, arr) =&gt; arr.map(fn));
+
+// ── Partial Application — نطبق Argument واحد ونوصل Function ──
+const add10      = add(10);        // ← function بتاخد رقم وتضيفله 10
+const double     = multiply(2);    // ← function بتضاعف
+const isEven     = (n) =&gt; n % 2 === 0;
+const getEvens   = filter_(isEven); // ← function بتفلتر الأرقام الزوجية
+
+// ── النتيجة في Pipe ────────────────────────────────────────────
+const processNumbers = pipe(
+    getEvens,            // نفلتر الزوجية
+    map_(double),        // نضاعف
+    map_(add10),         // نضيف 10
+);
+
+console.log(processNumbers([1, 2, 3, 4, 5, 6]));
+// [14, 18, 22]
+// الـ [2,4,6] → [4,8,12] → [14,18,22]</code></pre>
+<div class="spacer"></div>
+<h3 id="مثال-واقعي-data-pipeline-في-api" class="heading-3">مثال واقعي: Data Pipeline في API</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── سيناريو: بنبني Pipeline لمعالجة بيانات المستخدمين من API ──
+
+const pipe = (...fns) =&gt; (x) =&gt; fns.reduce((acc, fn) =&gt; fn(acc), x);
+const curry = (fn) =&gt; {
+    const arity = fn.length;
+    return function curried(...args) {
+        return args.length &gt;= arity
+            ? fn(...args)
+            : (...more) =&gt; curried(...args, ...more);
+    };
+};
+
+// ── الـ Pure Functions الصغيرة ────────────────────────────────
+const filterActive    = (users)     =&gt; users.filter(u =&gt; u.isActive);
+const sortByName      = (users)     =&gt; [...users].sort((a, b) =&gt; a.name.localeCompare(b.name));
+const take            = curry((n, arr) =&gt; arr.slice(0, n));
+const pluck           = curry((key, arr) =&gt; arr.map(u =&gt; u[key]));
+const formatUserName  = (name)      =&gt; name.trim().toLowerCase();
+const mapOver         = curry((fn, arr) =&gt; arr.map(fn));
+
+// ── الـ Pipeline ───────────────────────────────────────────────
+const getTopActiveUserNames = pipe(
+    filterActive,               // نفلتر المفعلين فقط
+    sortByName,                 // نرتب أبجدياً
+    take(5),                    // أول 5 بس
+    pluck('name'),              // نجيب الأسماء فقط
+    mapOver(formatUserName),    // ننضف الأسماء
+);
+
+// ── البيانات ──────────────────────────────────────────────────
+const users = [
+    { name: "Ahmed Hassan", isActive: true },
+    { name: "  Mona Ali  ", isActive: false },
+    { name: "Youssef Saad", isActive: true },
+    { name: "Sara Khaled ", isActive: true },
+    { name: "Omar Tarek",   isActive: true },
+    { name: "Nada Fathy",   isActive: true },
+    { name: "Kareem Mostafa", isActive: false },
+];
+
+console.log(getTopActiveUserNames(users));
+// ["ahmed hassan", "nada fathy", "omar tarek", "sara khaled", "youssef saad"]</code></pre>
+<div class="spacer"></div>
+<div class="callout-tip callout"><div class="callout-title"><span class="callout-icon">💡</span><span>نصيحة</span></div><div class="callout-body">
+<p><strong>نصيحة الخبراء:</strong> الـ <code class="inline-code">pipe</code> مش بس جمال — هو مسموح بيه في طريقة التفكير. كل Function في الـ Pipeline بتقدر تـ test عليها لوحدها، وبتقدر تحذف أو تضيف خطوة من غير ما تلمس الخطوات التانية. ده اللي بيسموه <strong>Open/Closed Principle</strong> في الـ Functional World.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="2-memoization-deep-dive" class="heading-2">2. Memoization Deep Dive</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-function-بتتنفذ-ألف-مرة-وبترجع-نفس-النتيجة" class="heading-3">المشكلة: Function بتتنفذ ألف مرة وبترجع نفس النتيجة</h3>
+<div class="spacer"></div>
+<p>تخيّل معايا إنك عندك Function بتحسب نتيجة معقدة — Fibonacci مثلاً. كل مرة بتنادي عليها بنفس الـ input، بتتنفذ من الأول. ده زي إنك كل يوم بتقوم تحل نفس المعادلة الرياضية بدل ما تكتب الإجابة على ورقة وتبص عليها.</p>
+<pre><code class="language-javascript">// ── المشكلة ────────────────────────────────────────────────────
+function fibonacci(n) {
+    if (n &lt;= 1) return n;
+    return fibonacci(n - 1) + fibonacci(n - 2);
+    // fibonacci(40) = ~100 مليون عملية حسابية! 😱
+}
+
+console.time('no-memo');
+fibonacci(40); // جرب وشوف
+console.timeEnd('no-memo'); // ممكن تاخد ثوان</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-memoization-الكراسة-اللي-بتكتب-فيها-الإجابات" class="heading-3">الـ Memoization: الكراسة اللي بتكتب فيها الإجابات</h3>
+<div class="spacer"></div>
+<p>الـ Memoization هي تقنية بتخزن نتيجة Function call عشان لو اتنادت تاني بنفس الـ Arguments، ترجع الـ Cached Result على طول من غير ما تحسبها تاني.</p>
+<pre><code class="language-javascript">// ── Generic Memoize Function ───────────────────────────────────
+function memoize(fn) {
+    const cache = new Map(); // ← الكراسة بتاعتنا
+
+    return function memoized(...args) {
+        // بنعمل key من الـ Arguments
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            console.log(`Cache hit لـ: ${key} ✅`);
+            return cache.get(key); // ← رجع من الكراسة فوراً
+        }
+
+        const result = fn.apply(this, args); // ← احسب للمرة الأولى
+        cache.set(key, result);               // ← اكتب في الكراسة
+        return result;
+    };
+}
+
+// ── مع Fibonacci ───────────────────────────────────────────────
+const fastFib = memoize(function fibonacci(n) {
+    if (n &lt;= 1) return n;
+    return fastFib(n - 1) + fastFib(n - 2); // ← بننادي على النسخة الـ memoized
+});
+
+console.time('with-memo');
+fastFib(40); // أسرع بكتير
+console.timeEnd('with-memo');
+
+fastFib(40); // تانية؟ فورية — من الكاش على طول</code></pre>
+<div class="spacer"></div>
+<h3 id="مشكلة-الـ-jsonstringify-كـ-key" class="heading-3">مشكلة الـ JSON.stringify كـ Key</h3>
+<div class="spacer"></div>
+<p>الـ <code class="inline-code">JSON.stringify</code> مش دايماً بيشتغل صح:</p>
+<pre><code class="language-javascript">// ── مشاكل الـ JSON.stringify ────────────────────────────────────
+JSON.stringify([undefined])      // "[null]"    ← غلط
+JSON.stringify([function(){}])   // "[null]"    ← غلط
+JSON.stringify([NaN])            // "[null]"    ← غلط
+JSON.stringify([Symbol()])       // "[null]"    ← غلط
+// لو Function بتاخد Objects ديناميكية، ممكن يتضرب
+
+// ── مشكلة تانية: الـ Object Reference ───────────────────────────
+const obj = { x: 1 };
+const memoFn = memoize((o) =&gt; o.x * 2);
+
+memoFn(obj);   // cache key: '{"x":1}'
+obj.x = 2;     // غيرنا الـ Object!
+memoFn(obj);   // cache key: '{"x":2}' — مش نفس الـ key! لو كان ref-based كان هيتعلق</code></pre>
+<div class="spacer"></div>
+<h3 id="memoize-أقوى-مع-weakmap-للـ-objects" class="heading-3">Memoize أقوى: مع WeakMap للـ Objects</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── Memoize ذكي بيفصل بين Primitives وObjects ─────────────────
+function smartMemoize(fn) {
+    // للـ Primitive Arguments
+    const primitiveCache = new Map();
+
+    // للـ Object Arguments (WeakMap مش بيمنع الـ GC)
+    const objectCache = new WeakMap();
+
+    return function memoized(...args) {
+        // لو Argument واحد بس وهو Object — استخدم WeakMap
+        if (args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+            if (objectCache.has(args[0])) {
+                return objectCache.get(args[0]);
+            }
+            const result = fn.apply(this, args);
+            objectCache.set(args[0], result);
+            return result;
+        }
+
+        // غير ده — استخدم JSON.stringify
+        const key = JSON.stringify(args);
+        if (primitiveCache.has(key)) return primitiveCache.get(key);
+
+        const result = fn.apply(this, args);
+        primitiveCache.set(key, result);
+        return result;
+    };
+}</code></pre>
+<div class="spacer"></div>
+<h3 id="متى-الـ-memoization-تبقى-anti-pattern" class="heading-3">⚠️ متى الـ Memoization تبقى Anti-Pattern؟</h3>
+<div class="spacer"></div>
+<p>ده من أهم أسئلة الإنترفيو — الـ Memoization مش دايماً حل:</p>
+<pre><code class="language-javascript">// ── ❌ Anti-Pattern 1: Function مش Pure ──────────────────────
+let callCount = 0;
+
+const impureCalc = memoize((x) =&gt; {
+    callCount++; // ← Side Effect! الـ Function مش Pure
+    return x * 2;
+});
+
+impureCalc(5); // callCount = 1
+impureCalc(5); // callCount = 1 لسه — الـ Side Effect ما اتنفذش!
+// ده bug مش optimization
+
+// ── ❌ Anti-Pattern 2: Function بتاخد Random أو Time ────────
+const getTimestamp = memoize(() =&gt; Date.now());
+// كل المرات هترجع نفس الـ Timestamp — كارثة!
+
+// ── ❌ Anti-Pattern 3: Cache بيكبر من غير حدود ──────────────
+const memoizeNaive = (fn) =&gt; {
+    const cache = {};
+    return (...args) =&gt; {
+        const key = JSON.stringify(args);
+        if (key in cache) return cache[key];
+        return (cache[key] = fn(...args));
+    };
+};
+
+// لو بتنادي بـ inputs مختلفة دايماً — الـ Cache هيكبر لحد ما الـ Memory تخلص!
+// محتاج LRU Cache أو حد أقصى للكاش</code></pre>
+<div class="spacer"></div>
+<h3 id="memoize-مع-lru-cache-الاحترافي" class="heading-3">Memoize مع LRU Cache (الاحترافي)</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── LRU Cache — بيمسح الأقدم لما الكاش يمتلي ─────────────────
+class LRUCache {
+    #capacity;
+    #cache = new Map(); // ← Map بيحافظ على ترتيب الإدراج
+
+    constructor(capacity = 100) {
+        this.#capacity = capacity;
+    }
+
+    get(key) {
+        if (!this.#cache.has(key)) return undefined;
+
+        // نقل للنهاية عشان يبان إنه "Least Recently Used" مش
+        const value = this.#cache.get(key);
+        this.#cache.delete(key);
+        this.#cache.set(key, value);
+        return value;
+    }
+
+    set(key, value) {
+        if (this.#cache.has(key)) {
+            this.#cache.delete(key); // نوضع في النهاية
+        } else if (this.#cache.size &gt;= this.#capacity) {
+            // امسح أول عنصر (الأقدم)
+            const firstKey = this.#cache.keys().next().value;
+            this.#cache.delete(firstKey);
+        }
+        this.#cache.set(key, value);
+    }
+
+    has(key) {
+        return this.#cache.has(key);
+    }
+}
+
+// ── Memoize بـ LRU ─────────────────────────────────────────────
+function memoizeWithLRU(fn, capacity = 100) {
+    const cache = new LRUCache(capacity);
+
+    return function memoized(...args) {
+        const key = JSON.stringify(args);
+
+        if (cache.has(key)) {
+            return cache.get(key);
+        }
+
+        const result = fn.apply(this, args);
+        cache.set(key, result);
+        return result;
+    };
+}
+
+// ── الاستخدام ──────────────────────────────────────────────────
+const expensiveCalc = memoizeWithLRU((n) =&gt; {
+    // حساب معقد
+    let result = 0;
+    for (let i = 0; i &lt; n * 1000; i++) result += Math.sqrt(i);
+    return result;
+}, 50); // نخزن آخر 50 نتيجة بس
+
+expensiveCalc(100); // بيحسب
+expensiveCalc(100); // من الكاش ✅
+expensiveCalc(200); // بيحسب
+// لو الكاش امتلى، أقدم entry اتمسح أوتوماتيك</code></pre>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    CALL["memoize(fn)(args)"]
+    CHECK{"Key موجود<br/>في الـ Cache؟"}
+    HIT["Cache Hit ✅<br/>ارجع القيمة فوراً"]
+    MISS["Cache Miss<br/>نفذ الـ Function"]
+    STORE["خزن النتيجة<br/>في الـ Cache"]
+    RETURN["ارجع النتيجة"]
+    LRU{"الـ Cache<br/>امتلى؟"}
+    EVICT["امسح أقدم Entry<br/>(LRU)"]
+
+    CALL --> CHECK
+    CHECK -->|"نعم"| HIT
+    CHECK -->|"لأ"| MISS
+    MISS --> STORE
+    STORE --> LRU
+    LRU -->|"نعم"| EVICT
+    LRU -->|"لأ"| RETURN
+    EVICT --> RETURN
+    HIT --> RETURN
+
+    style HIT fill:#27ae60,color:#fff
+    style MISS fill:#e74c3c,color:#fff
+    style EVICT fill:#e67e22,color:#fff
+</div></div>
+<div class="spacer"></div>
+<div class="callout-success callout"><div class="callout-title"><span class="callout-icon">✅</span><span>الطريقة الصح</span></div><div class="callout-body">
+<p><strong>نصيحة الخبراء:</strong> الـ Memoization بتشتغل بشكل صح بس مع <strong>Pure Functions</strong> — يعني Functions اللي:</p>
+<p class="callout-list-item">- لو نادتيها بنفس الـ Input، دايماً بترجع نفس الـ Output</p>
+<p class="callout-list-item">- مش بتعمل أي Side Effects (مش بتغير في الـ DB، مش بتكتب في الـ DOM، مش بتبعت Network Request)</p>
+<p>لو الـ Function مش Pure — الـ Memoization مش بس مش مفيدة، هي فعلاً خطيرة.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="3-transducers" class="heading-2">3. Transducers</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-الـ-mapfilterreduce-بتعمل-arrays-وسيطة-بتاكل-ميموري" class="heading-3">المشكلة: الـ map/filter/reduce بتعمل Arrays وسيطة بتاكل ميموري</h3>
+<div class="spacer"></div>
+<p>تخيّل معايا إن عندك Array فيها مليون User. بتعمل عليها <code class="inline-code">filter</code> وبعدين <code class="inline-code">map</code> وبعدين <code class="inline-code">reduce</code>. الكود بيبان كده:</p>
+<pre><code class="language-javascript">const users = [/* مليون user */];
+
+const result = users
+    .filter(isActive)      // ← بيعمل Array جديدة فيها مثلاً 600,000 عنصر
+    .filter(isAdult)       // ← Array تانية فيها 400,000 عنصر
+    .map(getEmail)         // ← Array تالتة فيها 400,000 email
+    .reduce(collectUnique, new Set()); // ← هنا بنجمع</code></pre>
+<div class="spacer"></div>
+<p>المشكلة إن كل خطوة <strong>بتقرأ Array كاملة وبتعمل Array جديدة</strong>. ده:</p>
+<p class="callout-list-item">بياكل ميموري كتير (لو البيانات كبيرة)</p>
+<p class="callout-list-item">بيعمل Garbage Collection كتير</p>
+<p class="callout-list-item">مش لازم! نقدر نعمل كل ده في pass واحد</p>
+<h3 id="الـ-reduce-الأساس-اللي-كل-حاجة-بتتبنى-عليه" class="heading-3">الـ reduce: الأساس اللي كل حاجة بتتبنى عليه</h3>
+<div class="spacer"></div>
+<p>قبل ما نتكلم عن Transducers، لازم تعرف حقيقة مهمة: <strong>كل <code class="inline-code">map</code> وكل <code class="inline-code">filter</code> ممكن تتعمل بـ <code class="inline-code">reduce</code></strong>:</p>
+<pre><code class="language-javascript">// ── map كـ reduce ────────────────────────────────────────────
+const mapAsReduce = (fn, arr) =&gt;
+    arr.reduce((acc, x) =&gt; [...acc, fn(x)], []);
+    // بنجمع النتيجة في Array جديدة
+
+// ── filter كـ reduce ─────────────────────────────────────────
+const filterAsReduce = (pred, arr) =&gt;
+    arr.reduce((acc, x) =&gt; pred(x) ? [...acc, x] : acc, []);
+    // بنضيف بس لو الشرط اتحقق
+
+// شايل إيه؟ كل Function بتاخد: accumulator، element، وبترجع accumulator جديد
+// ده الـ Reducer!</code></pre>
+<div class="spacer"></div>
+<h3 id="الـ-transducer-الفكرة-الجوهرية" class="heading-3">الـ Transducer: الفكرة الجوهرية</h3>
+<div class="spacer"></div>
+<p>الـ Transducer هو <strong>Transformer للـ Reducers نفسها</strong> — مش بيشتغل على الـ Data مباشرة، هو بيشتغل على الـ Function اللي بتشتغل على الـ Data. ده بيخليك تدمج كل الـ Transformations في Reducer واحد بيشتغل في pass واحد.</p>
+<div class="mermaid-wrap"><div class="mermaid">graph TD
+    NORMAL["الطريقة العادية"]
+    N1["filter → Array وسيطة 1"]
+    N2["map → Array وسيطة 2"]
+    N3["reduce → نتيجة"]
+
+    TRANS["الـ Transducer"]
+    T1["filter + map + collect<br/>في Reducer واحد"]
+    T2["pass واحد → نتيجة"]
+
+    NORMAL --> N1 --> N2 --> N3
+    TRANS --> T1 --> T2
+
+    style NORMAL fill:#e74c3c,color:#fff
+    style TRANS fill:#27ae60,color:#fff
+    style N1 fill:#c0392b,color:#fff
+    style N2 fill:#c0392b,color:#fff
+    style T1 fill:#1e8449,color:#fff
+</div></div>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── بناء Transducers خطوة بخطوة ──────────────────────────────
+
+// الـ Mapping Transducer
+const mapping = (fn) =&gt; (reducer) =&gt; (acc, x) =&gt; reducer(acc, fn(x));
+//              ↑            ↑           ↑
+//              fn = التحويل  reducer = المرحلة الجاية   acc, x = العناصر
+
+// الـ Filtering Transducer
+const filtering = (pred) =&gt; (reducer) =&gt; (acc, x) =&gt;
+    pred(x) ? reducer(acc, x) : acc;
+//  ↑
+//  لو الشرط مش متحقق — ارجع الـ accumulator من غير ما تضيف حاجة
+
+// الـ Collecting Reducer (النهاية)
+const append = (acc, x) =&gt; [...acc, x]; // بيجمع في Array
+const addToSet = (acc, x) =&gt; new Set([...acc, x]); // بيجمع في Set
+
+// ── Compose الـ Transducers ────────────────────────────────────
+const compose = (...fns) =&gt; (x) =&gt; fns.reduceRight((acc, fn) =&gt; fn(acc), x);
+
+// بنبني الـ Transducer Pipeline
+const xf = compose(
+    filtering(x =&gt; x % 2 === 0), // 1. فلتر الزوجية
+    mapping(x =&gt; x * x),         // 2. تربيع
+    mapping(x =&gt; x + 1),         // 3. ضيف 1
+);
+
+// xf ده Transducer — مش بيشتغل لسه على الـ Data
+// بناخده ونطبقه على الـ Collecting Reducer
+const transducedReducer = xf(append);
+
+// الآن نعمل reduce واحد بس على الـ Data الأصلية
+const result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].reduce(transducedReducer, []);
+
+console.log(result);
+// [5, 17, 37, 65, 101]
+// الـ Evens: [2,4,6,8,10] → Squared: [4,16,36,64,100] → +1: [5,17,37,65,101]
+// كل ده في pass واحد! ✅</code></pre>
+<div class="spacer"></div>
+<h3 id="مثال-واقعي-كامل-مع-array-كبيرة" class="heading-3">مثال واقعي كامل: مع Array كبيرة</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── بناء مكتبة Transducers صغيرة ─────────────────────────────
+
+const compose = (...fns) =&gt; (x) =&gt; fns.reduceRight((v, f) =&gt; f(v), x);
+
+// الـ Transducer Combinators
+const map     = (fn)   =&gt; (reducer) =&gt; (acc, x) =&gt; reducer(acc, fn(x));
+const filter  = (pred) =&gt; (reducer) =&gt; (acc, x) =&gt; pred(x) ? reducer(acc, x) : acc;
+const take    = (n)    =&gt; (reducer) =&gt; {
+    let count = 0;
+    return (acc, x) =&gt; {
+        if (count &gt;= n) return acc; // وقف — خدنا كفاية
+        count++;
+        return reducer(acc, x);
+    };
+};
+
+// الـ Collectors
+const into    = (to, xf, from) =&gt; from.reduce(xf(append), to);
+const append  = (acc, x) =&gt; { acc.push(x); return acc; }; // متغير للسرعة
+
+// ── سيناريو: معالجة بيانات Orders من متجر ───────────────────
+const orders = Array.from({ length: 1_000_000 }, (_, i) =&gt; ({
+    id: i + 1,
+    amount: Math.random() * 1000,
+    status: Math.random() &gt; 0.3 ? 'completed' : 'pending',
+    userId: Math.floor(Math.random() * 1000),
+}));
+
+// ── الطريقة العادية (3 intermediate arrays) ───────────────────
+console.time('normal');
+const normalResult = orders
+    .filter(o =&gt; o.status === 'completed')  // Array وسيطة 1
+    .map(o =&gt; o.amount)                     // Array وسيطة 2
+    .filter(a =&gt; a &gt; 500)                   // Array وسيطة 3
+    .slice(0, 10);                          // أخذنا 10
+console.timeEnd('normal');
+
+// ── الطريقة بـ Transducers (pass واحد، مش بياخد كل الـ Array) ─
+console.time('transducer');
+const xf = compose(
+    filter(o =&gt; o.status === 'completed'),
+    map(o =&gt; o.amount),
+    filter(a =&gt; a &gt; 500),
+    take(10),                               // بيوقف لما ياخد 10
+);
+
+const transducerResult = into([], xf, orders);
+console.timeEnd('transducer');
+
+// الـ Transducer أسرع بكتير — وكمان بيوقف أول ما ياخد 10 (early termination)!</code></pre>
+<div class="spacer"></div>
+<div class="callout-abstract callout"><div class="callout-title"><span class="callout-icon">🧠</span><span>ملاحظة</span></div><div class="callout-body">
+<p>⚠️ <strong>انتبه:</strong> الـ Transducers معقدة — متستخدمش في كل حاجة. استخدمها لما عندك:</p>
+<p class="callout-list-item">- Arrays/Streams كبيرة جداً (+100k عنصر)</p>
+<p class="callout-list-item">- سلسلة طويلة من <code class="inline-code">map/filter</code></p>
+<p class="callout-list-item">- محتاج Early Termination (زي <code class="inline-code">take</code>)</p>
+<p>للـ Use Cases العادية — الـ <code class="inline-code">map().filter()</code> العادية أوضح وأبسط.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="4-railway-oriented-programming" class="heading-2">4. Railway-Oriented Programming</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-الـ-error-handling-بالـ-trycatch-قبيح-ومش-composable" class="heading-3">المشكلة: الـ Error Handling بالـ try/catch قبيح ومش Composable</h3>
+<div class="spacer"></div>
+<p>تخيّل إنك بتكتب Function بتعمل Validation للـ User Registration. الطريقة العادية:</p>
+<pre><code class="language-javascript">// ── الطريقة العادية — try/catch جحيم ─────────────────────────
+async function registerUser(data) {
+    try {
+        const validated = validateEmail(data.email);
+        // لو فشل — Exception
+
+        try {
+            const hashed = await hashPassword(data.password);
+            // لو فشل — Exception تانية
+
+            try {
+                const user = await saveToDB({ ...validated, password: hashed });
+                // لو فشل — Exception تالتة
+
+                try {
+                    await sendWelcomeEmail(user.email);
+                    return user;
+                } catch (emailErr) {
+                    // إيه اللي نعمله؟ الـ User اتسجل بس الإيميل ما وصلش
+                    // هنرجع error؟ هنكمل؟ 😱
+                }
+            } catch (dbErr) {
+                // الـ DB فشل — إيه اللي نعمله بالـ hash؟
+            }
+        } catch (hashErr) {
+            // ...
+        }
+    } catch (validationErr) {
+        // ...
+    }
+}
+// ده مش كود — ده Callback Hell نسخة جديدة</code></pre>
+<div class="spacer"></div>
+<h3 id="الفكرة-السكة-الحديد" class="heading-3">الفكرة: السكة الحديد</h3>
+<div class="spacer"></div>
+<p>تخيّل معايا إن الكود بتاعك زي قطر على سكة حديد. عندك خطين:</p>
+<p class="callout-list-item"><strong>الخط الأخضر (Happy Path)</strong>: الكود بيشتغل صح وبيمشي للأمام</p>
+<p class="callout-list-item"><strong>الخط الأحمر (Error Track)</strong>: لو حصل error، القطر بيتحول لخط الـ Error وبيفضل ماشي من غير ما يوقف الـ Pipeline</p>
+<pre><code class="language-javascript">Input → [Validate] → [Hash] → [Save] → [Email] → Output ✅
+              ↓           ↓        ↓        ↓
+           Error       Error    Error    Error
+              ↓           ↓        ↓        ↓
+         [Error Track ←←←←←←←←←←←←←←←←←←←] → Error Output ❌</code></pre>
+<div class="spacer"></div>
+<h3 id="بناء-الـ-result-type-either-monad" class="heading-3">بناء الـ Result Type (Either Monad)</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── الـ Result Type — Box بيلف نتيجة أو Error ─────────────────
+
+class Ok {
+    #value;
+    constructor(value) { this.#value = value; }
+
+    // بنطبق Function لو الـ Result ناجح
+    map(fn) {
+        try {
+            return new Ok(fn(this.#value));
+        } catch (err) {
+            return new Err(err.message);
+        }
+    }
+
+    // زي map بس الـ fn بترجع Result هي كمان
+    flatMap(fn) {
+        try {
+            return fn(this.#value);
+        } catch (err) {
+            return new Err(err.message);
+        }
+    }
+
+    // لو بتستخدم مع Async Functions
+    async asyncFlatMap(fn) {
+        try {
+            return await fn(this.#value);
+        } catch (err) {
+            return new Err(err.message);
+        }
+    }
+
+    isOk()  { return true;  }
+    isErr() { return false; }
+
+    // اخرج من الـ Box
+    getOrElse(_default)  { return this.#value; }
+    getOrThrow()         { return this.#value; }
+
+    // اختار: لو Ok نفذ fnOk، لو Err نفذ fnErr
+    fold(fnOk, _fnErr) { return fnOk(this.#value); }
+
+    toString() { return `Ok(${JSON.stringify(this.#value)})`; }
+}
+
+class Err {
+    #error;
+    constructor(error) { this.#error = error; }
+
+    // لو Error — map مش بتعمل حاجة، بترجع نفس الـ Err
+    map(_fn)        { return this; }
+    flatMap(_fn)    { return this; }
+    async asyncFlatMap(_fn) { return this; }
+
+    isOk()  { return false; }
+    isErr() { return true;  }
+
+    getOrElse(defaultValue) { return defaultValue; }
+    getOrThrow()            { throw new Error(this.#error); }
+
+    fold(_fnOk, fnErr) { return fnErr(this.#error); }
+
+    toString() { return `Err(${this.#error})`; }
+}
+
+// ── Factory Functions ─────────────────────────────────────────
+const ok  = (value) =&gt; new Ok(value);
+const err = (error) =&gt; new Err(error);</code></pre>
+<div class="spacer"></div>
+<h3 id="railway-في-العمل" class="heading-3">Railway في العمل</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── Validation Functions ترجع Result ──────────────────────────
+
+function validateEmail(email) {
+    if (!email) return err('الإيميل مطلوب');
+    if (!email.includes('@')) return err('الإيميل مش صح');
+    if (email.length &lt; 5) return err('الإيميل قصير جداً');
+    return ok(email.trim().toLowerCase());
+}
+
+function validatePassword(password) {
+    if (!password) return err('الباسورد مطلوب');
+    if (password.length &lt; 8) return err('الباسورد لازم يكون 8 حروف على الأقل');
+    if (!/\d/.test(password)) return err('الباسورد لازم يحتوي على رقم');
+    return ok(password);
+}
+
+function validateAge(age) {
+    const n = parseInt(age);
+    if (isNaN(n)) return err('السن لازم يكون رقم');
+    if (n &lt; 18) return err('لازم تكون عندك 18 سنة على الأقل');
+    if (n &gt; 120) return err('السن غير منطقي');
+    return ok(n);
+}
+
+// ── Async Operations ترجع Result كمان ────────────────────────
+async function hashPassword(password) {
+    // Simulate async hashing
+    await new Promise(r =&gt; setTimeout(r, 100));
+    if (Math.random() &lt; 0.01) return err('Hashing service down');
+    return ok(`hashed_${password}_${Date.now()}`);
+}
+
+async function saveUserToDB(userData) {
+    await new Promise(r =&gt; setTimeout(r, 100));
+    if (userData.email === 'existing@example.com') {
+        return err('الإيميل ده مسجل قبل كده');
+    }
+    return ok({ id: Math.random().toString(36).slice(2), ...userData, createdAt: new Date() });
+}
+
+// ── الـ Pipeline النظيف بالـ Railway ─────────────────────────
+async function registerUser({ email, password, age }) {
+    return validateEmail(email)
+        .flatMap(validEmail =&gt;
+            validatePassword(password)
+                .flatMap(validPass =&gt;
+                    validateAge(age)
+                        .map(validAge =&gt; ({
+                            email: validEmail,
+                            password: validPass,
+                            age: validAge,
+                        }))
+                )
+        )
+        .asyncFlatMap(hashPassword) // Async step
+        .then(r =&gt; r.asyncFlatMap(saveUserToDB));
+}
+
+// ── الاستخدام ─────────────────────────────────────────────────
+async function main() {
+    const result = await registerUser({
+        email: "ahmed@example.com",
+        password: "pass123456",
+        age: "25",
+    });
+
+    result.fold(
+        (user) =&gt; console.log('✅ تسجيل ناجح:', user),
+        (error) =&gt; console.log('❌ خطأ:', error),
+    );
+
+    // ── لو الـ Validation فشل ─────────────────────────────────
+    const failResult = await registerUser({
+        email: "not-an-email",
+        password: "123",
+        age: "15",
+    });
+
+    failResult.fold(
+        (user)  =&gt; console.log('✅', user),
+        (error) =&gt; console.log('❌', error), // "الإيميل مش صح" — أول error
+    );
+}
+
+main();</code></pre>
+<div class="spacer"></div>
+<h3 id="pipe-مع-railway" class="heading-3">Pipe مع Railway</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── makeResult: بتحول Function عادية لـ Function بترجع Result ─
+const safeRun = (fn) =&gt; (...args) =&gt; {
+    try {
+        return ok(fn(...args));
+    } catch (e) {
+        return err(e.message);
+    }
+};
+
+// ── Pipeline هيمشي على الـ Railway ────────────────────────────
+const parseJSON = safeRun(JSON.parse);
+const getUsers  = safeRun((data) =&gt; {
+    if (!Array.isArray(data.users)) throw new Error('مفيش users في الـ JSON');
+    return data.users;
+});
+const filterAdults = safeRun((users) =&gt; {
+    const adults = users.filter(u =&gt; u.age &gt;= 18);
+    if (adults.length === 0) throw new Error('مفيش بالغين في البيانات');
+    return adults;
+});
+
+// ── الاستخدام ─────────────────────────────────────────────────
+const processInput = (jsonString) =&gt;
+    parseJSON(jsonString)
+        .flatMap(getUsers)
+        .flatMap(filterAdults)
+        .fold(
+            (users) =&gt; `تم معالجة ${users.length} مستخدم`,
+            (error) =&gt; `خطأ: ${error}`,
+        );
+
+console.log(processInput('{"users": [{"name": "Ahmed", "age": 25}, {"name": "Sara", "age": 16}]}'));
+// "تم معالجة 1 مستخدم"
+
+console.log(processInput('invalid json'));
+// "خطأ: Unexpected token 'i', "invalid json" is not valid JSON"
+
+console.log(processInput('{"products": []}'));
+// "خطأ: مفيش users في الـ JSON"</code></pre>
+<div class="spacer"></div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    INPUT["Input Data"]
+    V1["validateEmail"]
+    V2["validatePassword"]
+    V3["hashPassword"]
+    V4["saveToDb"]
+    SUCCESS["✅ Success"]
+    ERROR["❌ Error Track"]
+
+    INPUT --> V1
+    V1 -->|"Ok"| V2
+    V1 -->|"Err"| ERROR
+    V2 -->|"Ok"| V3
+    V2 -->|"Err"| ERROR
+    V3 -->|"Ok"| V4
+    V3 -->|"Err"| ERROR
+    V4 -->|"Ok"| SUCCESS
+    V4 -->|"Err"| ERROR
+
+    style SUCCESS fill:#27ae60,color:#fff
+    style ERROR fill:#e74c3c,color:#fff
+    style INPUT fill:#2c3e50,color:#fff
+</div></div>
+<div class="spacer"></div>
+<div class="callout-tip callout"><div class="callout-title"><span class="callout-icon">💡</span><span>نصيحة</span></div><div class="callout-body">
+<p><strong>نصيحة الخبراء:</strong> الـ Railway-Oriented Programming بيجعل الـ Error Handling <strong>Composable</strong>. مش محتاج تفكر في "هنعمل إيه لو فشل" في كل خطوة — الـ <code class="inline-code">Err</code> بيمشي على الـ Track الأحمر لوحده من غير ما يأثر على باقي الـ Pipeline.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="5-lazy-evaluation-infinite-sequences" class="heading-2">5. Lazy Evaluation & Infinite Sequences</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-محتاج-تتعامل-مع-بيانات-لا-نهائية-أو-كبيرة-جدا" class="heading-3">المشكلة: محتاج تتعامل مع بيانات لا نهائية أو كبيرة جداً</h3>
+<div class="spacer"></div>
+<p>تخيّل معايا إنك بتبني System بيولد أرقام Fibonacci. عايز تاخد أول 10 أرقام منها. الطريقة العادية؟</p>
+<pre><code class="language-javascript">// ── الطريقة العادية — مستحيلة مع اللانهائي ──────────────────
+function getAllFibonacci() {
+    const result = [];
+    let a = 0, b = 1;
+    while (true) {  // ← اللوب ده هيروح لفين؟ لا نهاية!
+        result.push(a);
+        [a, b] = [b, a + b];
+    }
+    return result; // ← ما هيوصلش هنا أبداً
+}</code></pre>
+<div class="spacer"></div>
+<p>الحل هو <strong>Lazy Evaluation</strong> — بنحسب القيم فقط لما نطلبها، مش كلها دفعة واحدة.</p>
+<h3 id="الـ-generator-functions-المصنع-اللي-بيشتغل-عند-الطلب" class="heading-3">الـ Generator Functions: المصنع اللي بيشتغل عند الطلب</h3>
+<div class="spacer"></div>
+<p>الـ Generator هو function خاصة بتستخدم <code class="inline-code">function*</code> وبتعمل <code class="inline-code">yield</code> بدل <code class="inline-code">return</code>. كل مرة بتطلب منه value، بيتنفذ لحد أول <code class="inline-code">yield</code> وبعدين بيقف ويستنى لما تطلبه تاني:</p>
+<pre><code class="language-javascript">// ── أبسط Generator ────────────────────────────────────────────
+function* simpleGen() {
+    console.log('قبل أول yield');
+    yield 1;
+    console.log('بين الأول والتاني');
+    yield 2;
+    console.log('قبل التالت');
+    yield 3;
+    console.log('خلصنا');
+}
+
+const gen = simpleGen();
+// لسه ما اشتغلش! الـ Generator مش بيشتغل لحد ما تطلبه
+
+console.log(gen.next()); // "قبل أول yield" ثم { value: 1, done: false }
+console.log(gen.next()); // "بين الأول والتاني" ثم { value: 2, done: false }
+console.log(gen.next()); // "قبل التالت" ثم { value: 3, done: false }
+console.log(gen.next()); // "خلصنا" ثم { value: undefined, done: true }</code></pre>
+<div class="spacer"></div>
+<h3 id="infinite-sequences-التسلسل-اللانهائي" class="heading-3">Infinite Sequences: التسلسل اللانهائي</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── Fibonacci لا نهائي ────────────────────────────────────────
+function* fibonacci() {
+    let a = 0, b = 1;
+    while (true) { // ← ده OK! الـ Generator بيتوقف بين الـ yields
+        yield a;
+        [a, b] = [b, a + b];
+    }
+}
+
+// ── Range لا نهائي ────────────────────────────────────────────
+function* range(start = 0, end = Infinity, step = 1) {
+    for (let i = start; i &lt; end; i += step) {
+        yield i;
+    }
+}
+
+// ── Natural Numbers ────────────────────────────────────────────
+function* naturals(from = 1) {
+    while (true) yield from++;
+}</code></pre>
+<div class="spacer"></div>
+<h3 id="مكتبة-lazy-operations-كاملة" class="heading-3">مكتبة Lazy Operations كاملة</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── take: خد N عناصر من أي Generator ─────────────────────────
+function* take(n, iterable) {
+    let count = 0;
+    for (const x of iterable) {
+        if (count &gt;= n) return; // ← وقف
+        yield x;
+        count++;
+    }
+}
+
+// ── map: طبق Function على كل عنصر (Lazy) ────────────────────
+function* lazyMap(fn, iterable) {
+    for (const x of iterable) {
+        yield fn(x); // ← مش بيحسب كلها — بيحسب واحدة واحدة
+    }
+}
+
+// ── filter: فلتر Lazy ─────────────────────────────────────────
+function* lazyFilter(pred, iterable) {
+    for (const x of iterable) {
+        if (pred(x)) yield x;
+    }
+}
+
+// ── zip: ادمج اتنين Iterables ─────────────────────────────────
+function* zip(iter1, iter2) {
+    const it1 = iter1[Symbol.iterator]();
+    const it2 = iter2[Symbol.iterator]();
+    while (true) {
+        const { value: v1, done: d1 } = it1.next();
+        const { value: v2, done: d2 } = it2.next();
+        if (d1 || d2) return;
+        yield [v1, v2];
+    }
+}
+
+// ── flatten: افرد الـ Nested Iterables ───────────────────────
+function* flatten(iterable, depth = 1) {
+    for (const x of iterable) {
+        if (depth &gt; 0 && x != null && typeof x[Symbol.iterator] === 'function' && typeof x !== 'string') {
+            yield* flatten(x, depth - 1);
+        } else {
+            yield x;
+        }
+    }
+}
+
+// ── collect: حول Generator لـ Array لما تبقى جاهز ────────────
+const toArray = (iterable) =&gt; [...iterable];
+const toSet   = (iterable) =&gt; new Set(iterable);
+const toMap   = (keyFn, iterable) =&gt; new Map([...iterable].map(x =&gt; [keyFn(x), x]));
+
+// ── sum: جمع كل عناصر الـ Generator ─────────────────────────
+const sum = (iterable) =&gt; {
+    let total = 0;
+    for (const x of iterable) total += x;
+    return total;
+};</code></pre>
+<div class="spacer"></div>
+<h3 id="تطبيقات-عملية" class="heading-3">تطبيقات عملية</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── مثال 1: أول 10 أرقام Fibonacci الزوجية ──────────────────
+const result1 = toArray(
+    take(10,
+        lazyFilter(
+            n =&gt; n % 2 === 0,
+            fibonacci()
+        )
+    )
+);
+
+console.log(result1);
+// [0, 2, 8, 34, 144, 610, 2584, 10946, 46368, 196418]
+// من تسلسل لا نهائي — بحسبنا بس اللي محتاجناه!
+
+// ── مثال 2: مجموع أول 1000 مربع فردي ─────────────────────────
+const result2 = sum(
+    lazyMap(
+        n =&gt; n * n,
+        lazyFilter(
+            n =&gt; n % 2 !== 0,
+            take(1000, naturals())
+        )
+    )
+);
+
+console.log(result2); // مجموع [1, 9, 25, 49, ...] لأول 1000 رقم فردي
+
+// ── مثال 3: Paginated API (جلب الصفحات وقت الطلب) ────────────
+async function* fetchPages(baseUrl) {
+    let page = 1;
+    while (true) {
+        const response = await fetch(`${baseUrl}?page=${page}`);
+        const data = await response.json();
+
+        if (data.items.length === 0) return; // خلصت الصفحات
+
+        yield* data.items; // ← كل عنصر بيتوصل فوراً
+        page++;
+    }
+}
+
+// استخدام: بناخد أول 50 item من الـ API من غير ما نجيب كل الصفحات
+async function getFirst50Items(url) {
+    const items = [];
+    for await (const item of fetchPages(url)) {
+        items.push(item);
+        if (items.length &gt;= 50) break; // ← بنوقف من غير ما نجيب بقية الـ Pages!
+    }
+    return items;
+}
+
+// ── مثال 4: Sliding Window ────────────────────────────────────
+function* slidingWindow(size, iterable) {
+    const window = [];
+    for (const x of iterable) {
+        window.push(x);
+        if (window.length &gt; size) window.shift();
+        if (window.length === size) yield [...window];
+    }
+}
+
+// Moving average
+const prices = [10, 12, 11, 14, 13, 15, 16, 14, 17, 19];
+const movingAvg = toArray(
+    lazyMap(
+        window =&gt; window.reduce((a, b) =&gt; a + b, 0) / window.length,
+        slidingWindow(3, prices)
+    )
+);
+
+console.log(movingAvg);
+// [11, 12.33, 12.67, 14, 14.67, 15, 15.67, 16.67]</code></pre>
+<div class="spacer"></div>
+<h3 id="lazy-pipeline-بـ-chaining" class="heading-3">Lazy Pipeline بـ Chaining</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── بناء Lazy Pipeline Class ───────────────────────────────────
+class LazyPipeline {
+    #generator;
+
+    constructor(iterable) {
+        this.#generator = (function* () { yield* iterable; })();
+    }
+
+    static from(iterable) {
+        return new LazyPipeline(iterable);
+    }
+
+    map(fn) {
+        const gen = this.#generator;
+        return new LazyPipeline((function* () {
+            for (const x of gen) yield fn(x);
+        })());
+    }
+
+    filter(pred) {
+        const gen = this.#generator;
+        return new LazyPipeline((function* () {
+            for (const x of gen) if (pred(x)) yield x;
+        })());
+    }
+
+    take(n) {
+        const gen = this.#generator;
+        return new LazyPipeline((function* () {
+            let count = 0;
+            for (const x of gen) {
+                if (count++ &gt;= n) return;
+                yield x;
+            }
+        })());
+    }
+
+    // Terminal operations (بيجمع النتيجة)
+    toArray()       { return [...this.#generator]; }
+    first()         { return this.#generator.next().value; }
+    sum()           { let t = 0; for (const x of this.#generator) t += x; return t; }
+    count()         { let c = 0; for (const _ of this.#generator) c++; return c; }
+    forEach(fn)     { for (const x of this.#generator) fn(x); }
+}
+
+// ── الاستخدام الجميل ──────────────────────────────────────────
+function* primes() {
+    const isPrime = (n) =&gt; {
+        if (n &lt; 2) return false;
+        for (let i = 2; i &lt;= Math.sqrt(n); i++) {
+            if (n % i === 0) return false;
+        }
+        return true;
+    };
+    yield* LazyPipeline.from(naturals(2)).filter(isPrime).#generator;
+}
+
+// أول 10 أعداد أولية أكبر من 100
+const bigPrimes = LazyPipeline
+    .from(naturals(101))
+    .filter(n =&gt; {
+        for (let i = 2; i &lt;= Math.sqrt(n); i++) if (n % i === 0) return false;
+        return true;
+    })
+    .take(10)
+    .toArray();
+
+console.log(bigPrimes);
+// [101, 103, 107, 109, 113, 127, 131, 137, 139, 149]</code></pre>
+<div class="spacer"></div>
+<div class="callout-tip callout"><div class="callout-title"><span class="callout-icon">💡</span><span>نصيحة</span></div><div class="callout-body">
+<p><strong>نصيحة الخبراء:</strong> الـ Lazy Evaluation ذكية جداً في ثلاث حالات:</p>
+<p class="callout-list-item">1. <strong>Infinite Sequences</strong> — زي Fibonacci أو Prime Numbers</p>
+<p class="callout-list-item">2. <strong>Large Datasets</strong> — لما مش محتاج كل البيانات</p>
+<p class="callout-list-item">3. <strong>Expensive Computations</strong> — لما العملية غالية وممكن ما تحتاجهاش</p>
+<p>أما لو الـ Dataset صغير وبتحتاج كل العناصر — الـ Array العادية أوضح وأبسط.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<h2 id="6-point-free-style" class="heading-2">6. Point-Free Style</h2>
+<div class="spacer"></div>
+<h3 id="المشكلة-الكود-المتكرر-اللي-بيذكر-الـ-arguments-من-غير-ما-يضيف-value" class="heading-3">المشكلة: الكود المتكرر اللي بيذكر الـ Arguments من غير ما يضيف value</h3>
+<div class="spacer"></div>
+<p>"Point-Free" — الـ "Point" هنا مش نقطة، هي <strong>الـ Argument</strong> (زي ما بيُقال في الرياضيات). "Point-Free" تعني: بنكتب Functions من غير ما نذكر الـ Arguments صراحة.</p>
+<pre><code class="language-javascript">// ── مش Point-Free ────────────────────────────────────────────
+const doubleAll    = (arr) =&gt; arr.map((x) =&gt; x * 2);
+const filterEvens  = (arr) =&gt; arr.filter((x) =&gt; x % 2 === 0);
+const sumAll       = (arr) =&gt; arr.reduce((acc, x) =&gt; acc + x, 0);
+
+// ── Point-Free (نفس الكلام بدون ذكر الـ Arguments) ───────────
+const double      = (x) =&gt; x * 2;
+const isEven      = (x) =&gt; x % 2 === 0;
+const add         = (a, b) =&gt; a + b;
+
+const doubleAll2   = map(double);       // ← ذكرنا الـ fn بس مش الـ arr
+const filterEvens2 = filter(isEven);    // ← نفس الموضوع
+const sumAll2      = reduce(add, 0);    // ← مش ذكرنا الـ arr
+
+// الاتنين بيعملوا نفس الكلام تماماً
+console.log(doubleAll([1, 2, 3]));      // [2, 4, 6]
+console.log(doubleAll2([1, 2, 3]));     // [2, 4, 6]</code></pre>
+<div class="spacer"></div>
+<h3 id="البناء-المدرجي-للـ-point-free" class="heading-3">البناء المدرجي للـ Point-Free</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── الأدوات الأساسية ──────────────────────────────────────────
+const curry  = (fn) =&gt; {
+    const arity = fn.length;
+    return function curried(...args) {
+        return args.length &gt;= arity
+            ? fn(...args)
+            : (...more) =&gt; curried(...args, ...more);
+    };
+};
+
+const pipe   = (...fns) =&gt; (x) =&gt; fns.reduce((acc, fn) =&gt; fn(acc), x);
+const map    = curry((fn, arr) =&gt; arr.map(fn));
+const filter = curry((pred, arr) =&gt; arr.filter(pred));
+const reduce = curry((fn, init, arr) =&gt; arr.reduce(fn, init));
+const prop   = curry((key, obj) =&gt; obj[key]);
+const eq     = curry((a, b) =&gt; a === b);
+const gt     = curry((a, b) =&gt; b &gt; a);
+const lt     = curry((a, b) =&gt; b &lt; a);
+const not    = (fn) =&gt; (...args) =&gt; !fn(...args);
+const both   = (f, g) =&gt; (x) =&gt; f(x) && g(x);
+const either = (f, g) =&gt; (x) =&gt; f(x) || g(x);
+const always = (x) =&gt; () =&gt; x;
+
+// ── أمثلة ────────────────────────────────────────────────────
+
+// الطريقة الـ Not Point-Free
+const getActiveAdultUsers = (users) =&gt;
+    users.filter(u =&gt; u.isActive && u.age &gt;= 18);
+
+// الطريقة الـ Point-Free
+const isActive  = prop('isActive');
+const getAge    = prop('age');
+const isAdult   = (u) =&gt; getAge(u) &gt;= 18;
+const isActiveAdult = both(isActive, isAdult);
+
+const getActiveAdultUsers_pf = filter(isActiveAdult);
+
+// نفس النتيجة!
+const users = [
+    { name: 'Ahmed', isActive: true, age: 25 },
+    { name: 'Sara', isActive: false, age: 30 },
+    { name: 'Omar', isActive: true, age: 16 },
+    { name: 'Nada', isActive: true, age: 22 },
+];
+
+console.log(getActiveAdultUsers(users));
+console.log(getActiveAdultUsers_pf(users));
+// [{ name: 'Ahmed', ... }, { name: 'Nada', ... }]</code></pre>
+<div class="spacer"></div>
+<h3 id="مثال-متكامل-data-processing-pipeline-بأسلوب-point-free" class="heading-3">مثال متكامل: Data Processing Pipeline بأسلوب Point-Free</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── الـ Building Blocks ───────────────────────────────────────
+const split   = curry((sep, str)  =&gt; str.split(sep));
+const join    = curry((sep, arr)  =&gt; arr.join(sep));
+const trim    = (str)  =&gt; str.trim();
+const toLower = (str)  =&gt; str.toLowerCase();
+const toUpper = (str)  =&gt; str.toUpperCase();
+const replace = curry((regex, replacement, str) =&gt; str.replace(regex, replacement));
+const head    = (arr)  =&gt; arr[0];
+const tail    = (arr)  =&gt; arr.slice(1);
+const length  = (arr)  =&gt; arr.length;
+const append  = curry((item, arr) =&gt; [...arr, item]);
+
+// ── Pipeline لمعالجة CSV Data ─────────────────────────────────
+
+// تحويل سطر CSV لـ Object
+const parseCSVLine = pipe(
+    trim,
+    split(','),
+    map(trim),
+);
+
+// تحويل String لـ Slug
+const toSlug = pipe(
+    trim,
+    toLower,
+    replace(/\s+/g, '-'),
+    replace(/[^a-z0-9-]/g, ''),
+);
+
+// تحويل اسم لـ Initials
+const toInitials = pipe(
+    trim,
+    split(' '),
+    map(head),
+    map(toUpper),
+    join(''),
+);
+
+// ── الاستخدام ─────────────────────────────────────────────────
+console.log(parseCSVLine('  Ahmed Hassan , 25 , Cairo  '));
+// ['Ahmed Hassan', '25', 'Cairo']
+
+console.log(toSlug('Hello World & JS!'));
+// 'hello-world--js'
+
+console.log(toInitials('Ahmed Hassan Mohamed'));
+// 'AHM'
+
+// ── Pipeline أكبر: معالجة قائمة مستخدمين ─────────────────────
+const getName     = prop('name');
+const getEmail    = prop('email');
+const getIsActive = prop('isActive');
+
+const formatUser  = (user) =&gt; ({
+    ...user,
+    slug:     toSlug(user.name),
+    initials: toInitials(user.name),
+    email:    toLower(user.email),
+});
+
+const processUsers = pipe(
+    filter(getIsActive),           // فلتر الـ active
+    map(formatUser),               // نضيف slug وinitials
+    map(u =&gt; ({ ...u, name: u.name.trim() })), // ننضف الاسم
+);
+
+const rawUsers = [
+    { name: '  Ahmed Hassan  ', email: 'AHMED@EXAMPLE.COM', isActive: true },
+    { name: 'Sara Ali',         email: 'sara@example.com',  isActive: false },
+    { name: 'Omar Saad',        email: 'OMAR@EXAMPLE.COM',  isActive: true },
+];
+
+console.log(processUsers(rawUsers));
+/*
+[
+    { name: 'Ahmed Hassan', email: 'ahmed@example.com', slug: 'ahmed-hassan', initials: 'AH', isActive: true },
+    { name: 'Omar Saad',   email: 'omar@example.com',  slug: 'omar-saad',    initials: 'OS', isActive: true },
+]
+*/</code></pre>
+<div class="spacer"></div>
+<h3 id="point-free-vs-الكود-العادي-مقارنة" class="heading-3">Point-Free vs الكود العادي: مقارنة</h3>
+<div class="spacer"></div>
+<pre><code class="language-javascript">// ── نفس العملية بالطريقتين ────────────────────────────────────
+
+const orders = [
+    { id: 1, status: 'completed', amount: 150, userId: 1 },
+    { id: 2, status: 'pending',   amount: 200, userId: 2 },
+    { id: 3, status: 'completed', amount: 50,  userId: 1 },
+    { id: 4, status: 'completed', amount: 300, userId: 3 },
+];
+
+// الطريقة العادية
+const totalRevenue_normal = orders
+    .filter(order =&gt; order.status === 'completed')
+    .map(order =&gt; order.amount)
+    .reduce((sum, amount) =&gt; sum + amount, 0);
+
+// الطريقة Point-Free
+const isCompleted   = pipe(prop('status'), eq('completed'));
+const getAmount     = prop('amount');
+const addNumbers    = (a, b) =&gt; a + b;
+
+const totalRevenue_pf = pipe(
+    filter(isCompleted),
+    map(getAmount),
+    reduce(addNumbers, 0),
+)(orders);
+
+console.log(totalRevenue_normal); // 500
+console.log(totalRevenue_pf);     // 500</code></pre>
+<div class="spacer"></div>
+<table class="styled-table"><thead><tr>
+<th></th>
+<th>الطريقة العادية</th>
+<th>Point-Free</th>
+</tr></thead><tbody>
+<tr>
+<td>قابلية القراءة</td>
+<td>أوضح للـ Beginners</td>
+<td>أوضح بعد الخبرة</td>
+</tr>
+<tr>
+<td>إعادة الاستخدام</td>
+<td>محدودة</td>
+<td>عالية جداً</td>
+</tr>
+<tr>
+<td>الـ Testing</td>
+<td>بتـtest الكل مع بعض</td>
+<td>بتـtest كل Building Block</td>
+</tr>
+<tr>
+<td>الـ Composability</td>
+<td>صعبة</td>
+<td>سهلة جداً</td>
+</tr>
+<tr>
+<td>مناسب لـ</td>
+<td>مشاريع صغيرة</td>
+<td>Functional Codebases كبيرة</td>
+</tr>
+</tbody></table>
+<div class="spacer"></div>
+<div class="callout-example callout"><div class="callout-title"><span class="callout-icon">💻</span><span>كود</span></div><div class="callout-body">
+<p>⚠️ <strong>انتبه:</strong> الـ Point-Free مش هدف في حد نفسه — هو أسلوب. لو الكود Point-Free بيبقى أصعب في القراءة، ارجع للطريقة العادية. الهدف هو الوضوح مش الـ Style.</p>
+</div></div>
+<div class="spacer"></div>
+<hr class="divider">
+<div class="spacer"></div>
+<div class="spacer"></div></div></section>
   </main>
 
   <!-- TOC -->
@@ -3762,6 +7072,20 @@ processInOrder();
 <a href="#questions-21-25" class="toc-link toc-level-3" style="padding-right:28px" onclick="showSection(4)">Questions 21 → 25</a>
 </div>
 
+<div id="toc-5" class="toc-section" style="display:none"><a href="#2-v8-hidden-classes--inline-caching" class="toc-link toc-level-1" style="padding-right:0px" onclick="showSection(5)">🔬 V8 Hidden Classes & GC</a>
+<a href="#2-v8-hidden-classes--inline-caching" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(5)">V8 Hidden Classes & Inline Caching</a>
+<a href="#3-garbage-collection-algorithms" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(5)">Garbage Collection Algorithms</a>
+</div>
+<div id="toc-6" class="toc-section" style="display:none"><a href="#5-symbols--البروتوكولات-الخفية-للغة" class="toc-link toc-level-1" style="padding-right:0px" onclick="showSection(6)">🔣 Symbols & Well-Known Protocols</a>
+</div>
+<div id="toc-7" class="toc-section" style="display:none"><a href="#1-compose-vs-pipe" class="toc-link toc-level-1" style="padding-right:0px" onclick="showSection(7)">🎯 FP Masterclass</a>
+<a href="#1-compose-vs-pipe" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Compose vs Pipe</a>
+<a href="#2-memoization-deep-dive" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Memoization Deep Dive</a>
+<a href="#3-transducers" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Transducers</a>
+<a href="#4-railway-oriented-programming" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Railway-Oriented Programming</a>
+<a href="#5-lazy-evaluation--infinite-sequences" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Lazy Evaluation & Infinite Sequences</a>
+<a href="#6-point-free-style" class="toc-link toc-level-2" style="padding-right:14px" onclick="showSection(7)">Point-Free Style</a>
+</div>
   </aside>
 
 </div>

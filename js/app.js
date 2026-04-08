@@ -5,8 +5,12 @@
 
 // ── Section switching ──────────────────────────────────────────────────
 let currentSection = 0;
+const scrollPositions = {};
 
 function showSection(idx) {
+  // Save scroll for current section
+  scrollPositions[currentSection] = window.scrollY;
+
   // Hide all sections
   document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
   document.querySelectorAll('.toc-section').forEach(s => s.style.display = 'none');
@@ -22,7 +26,9 @@ function showSection(idx) {
   if (btn) btn.classList.add('active');
 
   currentSection = idx;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  
+  const targetScroll = scrollPositions[idx] || 0;
+  window.scrollTo({ top: targetScroll, behavior: 'auto' });
 
   // Re-init mermaid for newly shown section
   requestAnimationFrame(() => {
@@ -314,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof mermaid !== 'undefined') {
     const config = getMermaidTheme();
     mermaid.initialize({
-      startOnLoad: true,
+      startOnLoad: false,
       ...config
     });
   }
@@ -333,4 +339,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (overlay) {
     overlay.addEventListener('click', closeMobileSidebar);
   }
+
+  // Wire up theme toggle button
+  if (thBtn) thBtn.addEventListener('click', toggleTheme);
+
+  // Initial show section 0 to trigger mermaid and layout
+  showSection(0);
 });
